@@ -7,7 +7,7 @@ name = "nutrition-pad"
 version = "0.1.0"
 description = "Touch-friendly food pad interface for calorie tracking"
 authors = [
-    {name = "User", email = "user@example.com"}
+    {name = "talwrii", email = "talwrii@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
