@@ -95,7 +95,6 @@ protein = 0
 """
 
 # --- HTML TEMPLATES ---
-
 HTML_INDEX = """
 <!DOCTYPE html>
 <html>
@@ -111,6 +110,7 @@ HTML_INDEX = """
             font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
             min-height: 100vh;
             overflow-x: hidden;
+            padding-bottom: 120px;
         }
         
         .header {
@@ -143,15 +143,6 @@ HTML_INDEX = """
             text-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
         }
         
-        .daily-total {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 1.8em;
-            font-weight: 600;
-            color: #00d4ff;
-            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
-        }
-        
         .nav-tabs {
             display: flex;
             justify-content: center;
@@ -175,6 +166,9 @@ HTML_INDEX = """
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            text-decoration: none;
+            display: block;
+            text-align: center;
         }
         
         .tab-btn.active {
@@ -255,54 +249,12 @@ HTML_INDEX = """
             font-weight: 600;
         }
         
-        .today-log {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-        
-        .log-title {
-            text-align: center;
-            font-size: 2em;
-            font-weight: 700;
-            margin-bottom: 30px;
-            color: #00d4ff;
-        }
-        
-        .log-item {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 15px;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .log-item-name {
-            font-size: 1.3em;
-            font-weight: 600;
-        }
-        
-        .log-item-cal {
-            font-size: 1.2em;
-            color: #4ecdc4;
-            font-weight: 700;
-        }
-        
-        .log-item-time {
-            font-size: 0.9em;
-            color: rgba(255, 255, 255, 0.6);
-            margin-top: 5px;
-        }
-        
         .no-foods {
             text-align: center;
             color: rgba(255, 255, 255, 0.5);
             font-size: 1.2em;
             margin: 50px 0;
+            grid-column: 1 / -1;
         }
         
         .bottom-nav {
@@ -327,6 +279,7 @@ HTML_INDEX = """
             font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
+            margin-bottom: 10px;
         }
         
         .bottom-nav-btn:hover {
@@ -358,57 +311,9 @@ HTML_INDEX = """
             .header h1 {
                 font-size: 2em;
             }
-            
-            .daily-total {
-                font-size: 1.4em;
-            }
         }
-        
-        .hidden { display: none; }
     </style>
     <script>
-        var currentPad = "{{ first_pad_key }}";
-        var pads = {{ pads_json|safe }};
-        
-        function showPad(padKey) {
-            currentPad = padKey;
-            
-            // Update tab buttons
-            var tabs = document.getElementsByClassName('tab-btn');
-            for (var i = 0; i < tabs.length; i++) {
-                if (tabs[i].getAttribute('data-pad') === padKey) {
-                    tabs[i].className = 'tab-btn active';
-                } else {
-                    tabs[i].className = 'tab-btn';
-                }
-            }
-            
-            // Update food grid
-            var grid = document.getElementById('food-grid');
-            grid.innerHTML = '';
-            
-            if (pads[padKey] && pads[padKey].foods) {
-                var foods = pads[padKey].foods;
-                for (var foodKey in foods) {
-                    var food = foods[foodKey];
-                    var ratio = food.calories > 0 ? (food.protein / food.calories).toFixed(2) : '0.00';
-                    var btn = document.createElement('div');
-                    btn.className = 'food-btn';
-                    btn.setAttribute('data-food', foodKey);
-                    btn.setAttribute('data-pad', padKey);
-                    btn.onclick = function() {
-                        logFood(this.getAttribute('data-pad'), this.getAttribute('data-food'));
-                    };
-                    
-                    btn.innerHTML = 
-                        '<div class="food-name">' + food.name + '</div>' +
-                        '<div class="food-calories">' + ratio + ' p/cal</div>';
-                    
-                    grid.appendChild(btn);
-                }
-            }
-        }
-        
         function logFood(padKey, foodKey) {
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
@@ -432,19 +337,6 @@ HTML_INDEX = """
         function showNutrition() {
             window.location.href = '/nutrition';
         }
-        
-        // Initialize first pad on load
-        function onLoad() {
-            showPad(currentPad);
-        }
-        
-        if (window.addEventListener) {
-            window.addEventListener('load', onLoad, false);
-        } else if (window.attachEvent) {
-            window.attachEvent('onload', onLoad);
-        } else {
-            window.onload = onLoad;
-        }
     </script>
 </head>
 <body>
@@ -455,220 +347,33 @@ HTML_INDEX = """
     
     <div class="nav-tabs">
         {% for pad_key, pad_data in pads.items() %}
-        <button class="tab-btn {% if loop.index0 == 0 %}active{% endif %}" 
-                data-pad="{{ pad_key }}" 
-                onclick="showPad('{{ pad_key }}')">
+        <a class="tab-btn {% if pad_key == current_pad %}active{% endif %}" 
+           href="/?pad={{ pad_key }}">
             {{ pad_data.name }}
-        </button>
+        </a>
         {% endfor %}
     </div>
     
     <div id="food-grid" class="food-grid">
-        <!-- Foods populated by JavaScript -->
+        {% if current_pad_data and current_pad_data.foods %}
+            {% for food_key, food in current_pad_data.foods.items() %}
+            <div class="food-btn" 
+                 onclick="logFood('{{ current_pad }}', '{{ food_key }}')">
+                <div class="food-name">{{ food.name }}</div>
+                <div class="food-calories">{% if food.calories > 0 %}{{ "%.2f"|format(food.protein / food.calories) }}{% else %}0.00{% endif %} p/cal</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-foods">No foods in this pad</div>
+        {% endif %}
     </div>
     
     <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="showTodayLog()" style="margin-bottom: 10px;">
+        <button class="bottom-nav-btn" onclick="showTodayLog()">
             View Today's Log
         </button>
-        <button class="bottom-nav-btn" onclick="showNutrition()" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
+        <button class="bottom-nav-btn" onclick="showNutrition()" style="background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
             Nutrition Dashboard
-        </button>
-    </div>
-</body>
-</html>
-"""
-
-HTML_NUTRITION = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Nutrition Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #fff; 
-            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            padding-bottom: 80px;
-        }
-        
-        .header {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -1px;
-        }
-        
-        .nutrition-stats {
-            max-width: 800px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-        
-        .stat-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 15px;
-            padding: 25px;
-            text-align: center;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .stat-value {
-            font-size: 2.2em;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-        
-        .stat-value.calories { color: #ff6b6b; }
-        .stat-value.protein { color: #4ecdc4; }
-        .stat-value.ratio { color: #00d4ff; }
-        
-        .stat-label {
-            font-size: 1em;
-            color: rgba(255, 255, 255, 0.7);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .log-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-        
-        .log-item {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 15px;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .log-item:hover {
-            background: rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-        }
-        
-        .log-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .log-item-name {
-            font-size: 1.3em;
-            font-weight: 600;
-        }
-        
-        .log-item-nutrition {
-            display: flex;
-            gap: 15px;
-            font-size: 0.9em;
-        }
-        
-        .nutrition-value {
-            padding: 5px 10px;
-            border-radius: 8px;
-            font-weight: 600;
-        }
-        
-        .calories { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
-        .protein { background: rgba(78, 205, 196, 0.2); color: #4ecdc4; }
-        .ratio { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
-        
-        .log-item-time {
-            font-size: 0.9em;
-            color: rgba(255, 255, 255, 0.6);
-        }
-        
-        .no-entries {
-            text-align: center;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 1.2em;
-            margin: 50px 0;
-        }
-        
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(20px);
-            padding: 15px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .bottom-nav-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
-            border: none;
-            border-radius: 15px;
-            color: white;
-            font-size: 1.2em;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .bottom-nav-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Nutrition Dashboard</h1>
-    </div>
-    
-    <div class="nutrition-stats">
-        <div class="stat-cards">
-            <div class="stat-card">
-                <div class="stat-value calories">{{ total_calories }}</div>
-                <div class="stat-label">Calories</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value protein">{{ total_protein }}g</div>
-                <div class="stat-label">Protein</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value ratio">{{ avg_ratio }}</div>
-                <div class="stat-label">Avg P/Cal</div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="window.location.href='/'">
-            Back to Food Pads
         </button>
     </div>
 </body>
@@ -830,8 +535,142 @@ HTML_TODAY = """
 </html>
 """
 
-# --- HELPER FUNCTIONS ---
+HTML_NUTRITION = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nutrition Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff; 
+            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .nutrition-stats {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value.calories { color: #ff6b6b; }
+        .stat-value.protein { color: #4ecdc4; }
+        .stat-value.ratio { color: #00d4ff; }
+        
+        .stat-label {
+            font-size: 1em;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .bottom-nav-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .bottom-nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Nutrition Dashboard</h1>
+    </div>
+    
+    <div class="nutrition-stats">
+        <div class="stat-cards">
+            <div class="stat-card">
+                <div class="stat-value calories">{{ total_calories }}</div>
+                <div class="stat-label">Calories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value protein">{{ total_protein }}g</div>
+                <div class="stat-label">Protein</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value ratio">{{ avg_ratio }}</div>
+                <div class="stat-label">Avg P/Cal</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bottom-nav">
+        <button class="bottom-nav-btn" onclick="window.location.href='/'">
+            Back to Food Pads
+        </button>
+    </div>
+</body>
+</html>
+"""
 
+# --- HELPER FUNCTIONS ---
 def load_config():
     """Load TOML config file, create default if not exists"""
     if not os.path.exists(CONFIG_FILE):
@@ -908,23 +747,30 @@ def calculate_nutrition_stats():
     }
 
 # --- ROUTES ---
-
 @app.route('/')
 def index():
     config = load_config()
     pads = config.get('pads', {})
+    
+    # Get current pad from URL parameter
+    current_pad = request.args.get('pad', list(pads.keys())[0] if pads else None)
+    
+    # If invalid pad, redirect to first pad
+    if current_pad not in pads and pads:
+        return redirect(url_for('index', pad=list(pads.keys())[0]))
+    
+    # Get current pad data
+    current_pad_data = pads.get(current_pad, {})
+    
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
     
-    # Get first pad key for JavaScript initialization
-    first_pad_key = list(pads.keys())[0] if pads else ""
-    
     return render_template_string(HTML_INDEX,
                                 pads=pads,
+                                current_pad=current_pad,
+                                current_pad_data=current_pad_data,
                                 daily_total=daily_total,
-                                item_count=item_count,
-                                first_pad_key=first_pad_key,
-                                pads_json=json.dumps(pads))
+                                item_count=item_count)
 
 @app.route('/today')
 def today_log():
@@ -972,15 +818,14 @@ def log_food():
     return jsonify({'status': 'success'})
 
 # --- MAIN ---
-
 def main():
-    parser = argparse.ArgumentParser(description="Calorie Counter")
+    parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')
     parser.add_argument('--port', type=int, default=5001, help='Port')
     parser.add_argument('--debug', action='store_true', help='Debug mode')
     args = parser.parse_args()
-
-    print("Starting Calorie Counter on http://{}:{}".format(args.host, args.port))
+    
+    print("Starting Nutrition Pad on http://{}:{}".format(args.host, args.port))
     print("Config file: {}".format(CONFIG_FILE))
     print("Logs directory: {}".format(LOGS_DIR))
     
