@@ -423,7 +423,6 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
-        <div class="daily-total">{{ daily_total }} calories today</div>
     </div>
     
     <div class="nav-tabs">
@@ -708,7 +707,7 @@ def log_food():
 
 def main():
     parser = argparse.ArgumentParser(description="Calorie Counter")
-    parser.add_argument('--host', default='0.0.0.0', help='Host IP')
+    parser.add_argument('--host', default='localhost', help='Host IP')
     parser.add_argument('--port', type=int, default=5001, help='Port')
     parser.add_argument('--debug', action='store_true', help='Debug mode')
     args = parser.parse_args()

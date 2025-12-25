@@ -30,6 +30,10 @@ nutrition-pad = "nutrition_pad.main:main"
 [tool.setuptools]
 py-modules = ["main"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
 [tool.black]
 line-length = 88
 target-version = ['py37']
