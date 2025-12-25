@@ -1,45 +1,40 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = [ "setuptools>=45", "wheel",]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "nutrition-pad"
-version = "1.0.0"
+version = "1.1.0"
 description = "Touch-friendly food pad interface for calorie tracking"
-authors = [
-    {name = "talwrii", email = "talwrii@gmail.com"}
-]
-license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.7"
-dependencies = [
-    "Flask>=2.0.0",
-    "toml>=0.10.0",
-]
+dependencies = [ "Flask>=2.0.0", "toml>=0.10.0",]
+[[project.authors]]
+name = "talwrii"
+email = "talwrii@gmail.com"
+
+[project.license]
+text = "MIT"
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=6.0",
-    "black",
-    "flake8",
-]
+dev = [ "pytest>=6.0", "black", "flake8",]
 
 [project.scripts]
 nutrition-pad = "nutrition_pad.main:main"
 
 [tool.setuptools]
-py-modules = ["main"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
+py-modules = [ "main",]
 
 [tool.black]
 line-length = 88
-target-version = ['py37']
+target-version = [ "py37",]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
+testpaths = [ "tests",]
+python_files = [ "test_*.py",]
+python_classes = [ "Test*",]
+python_functions = [ "test_*",]
+
+[tool.setuptools.packages.find]
+where = [ ".",]
+include = [ "*",]
