@@ -14,6 +14,7 @@ app.secret_key = os.urandom(24)
 last_update = time.time()
 update_lock = threading.Lock()
 update_event = threading.Event()
+current_nonce = None  # Store the nonce from the last update
 
 CONFIG_FILE = 'foods.toml'
 LOGS_DIR = 'daily_logs'
@@ -323,19 +324,36 @@ HTML_INDEX = """
     <script>
         var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
         var isPolling = false;
+        var myNonce = null; // Track our own updates
+        
+        function generateNonce() {
+            return Date.now().toString() + Math.random().toString(36);
+        }
         
         function logFood(padKey, foodKey) {
+            myNonce = generateNonce();
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
             xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    // Update item count immediately since we know what happened
+                    var itemCountEl = document.querySelector('.item-count');
+                    if (itemCountEl) {
+                        var currentCount = parseInt(itemCountEl.textContent) || 0;
+                        itemCountEl.textContent = (currentCount + 1) + ' items logged today';
+                    }
+                }
+            };
             xhr.send(JSON.stringify({
                 pad: padKey,
-                food: foodKey
+                food: foodKey,
+                nonce: myNonce
             }));
         }
         
         function poll() {
-            if (isPolling) return; // Prevent multiple polls
+            if (isPolling) return;
             isPolling = true;
             
             var xhr = new XMLHttpRequest();
@@ -347,25 +365,27 @@ HTML_INDEX = """
                         try {
                             var data = JSON.parse(xhr.responseText);
                             if (data.updated && data.timestamp > lastUpdate) {
-                                // Actually changed - update and reload
                                 lastUpdate = data.timestamp;
                                 localStorage.setItem('lastUpdate', lastUpdate.toString());
                                 
-                                // Update item count immediately
-                                var itemCountEl = document.querySelector('.item-count');
-                                if (itemCountEl) {
-                                    itemCountEl.textContent = data.item_count + ' items logged today';
+                                // Only refresh if this isn't our own update
+                                if (data.nonce !== myNonce) {
+                                    var itemCountEl = document.querySelector('.item-count');
+                                    if (itemCountEl) {
+                                        itemCountEl.textContent = data.item_count + ' items logged today';
+                                    }
+                                    
+                                    setTimeout(function() {
+                                        window.location.reload();
+                                    }, 1000);
+                                    return;
+                                } else {
+                                    // Clear our nonce since we've seen our own update
+                                    myNonce = null;
                                 }
-                                
-                                // Reload to show new food entries
-                                setTimeout(function() {
-                                    window.location.reload();
-                                }, 1000);
-                                return; // Don't schedule next poll - page will reload
                             }
                         } catch (e) {}
                     }
-                    // Only schedule next poll if we're not reloading
                     setTimeout(poll, 30000);
                 }
             };
@@ -895,11 +915,12 @@ def calculate_nutrition_stats():
         'avg_ratio': f"{avg_ratio:.2f}"
     }
 
-def mark_updated():
+def mark_updated(nonce=None):
     """Mark that data has been updated for long polling"""
-    global last_update
+    global last_update, current_nonce
     with update_lock:
         last_update = time.time()
+        current_nonce = nonce
     # Wake up all waiting threads immediately
     update_event.set()
     # Clear the event after a brief moment so it's ready for next update
@@ -919,7 +940,8 @@ def poll_updates():
                 'updated': True,
                 'timestamp': last_update,
                 'item_count': calculate_daily_item_count(),
-                'total_protein': calculate_daily_total()
+                'total_protein': calculate_daily_total(),
+                'nonce': current_nonce
             })
     
     # Wait for update event or timeout
@@ -932,7 +954,8 @@ def poll_updates():
                     'updated': True,
                     'timestamp': last_update,
                     'item_count': calculate_daily_item_count(),
-                    'total_protein': calculate_daily_total()
+                    'total_protein': calculate_daily_total(),
+                    'nonce': current_nonce
                 })
     
     return jsonify({'updated': False})
@@ -989,6 +1012,7 @@ def log_food():
     
     pad_key = data.get('pad')
     food_key = data.get('food')
+    nonce = data.get('nonce')  # Get the nonce from client
     
     if not pad_key or not food_key:
         return jsonify({'error': 'Missing pad or food key'}), 400
@@ -1004,8 +1028,8 @@ def log_food():
     food_data = config['pads'][pad_key]['foods'][food_key]
     save_food_entry(pad_key, food_key, food_data)
     
-    # Mark that data has been updated for long polling
-    mark_updated()
+    # Mark that data has been updated with the nonce
+    mark_updated(nonce)
     
     return jsonify({'status': 'success'})
 
