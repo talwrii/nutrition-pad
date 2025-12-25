@@ -359,12 +359,13 @@ HTML_INDEX = """
                                     window.location.reload();
                                 }, 1000);
                             }
-                            poll(); // Start next poll immediately
+                            // Always wait 30 seconds before next poll
+                            setTimeout(poll, 30000);
                         } catch (e) {
-                            setTimeout(poll, 5000); // Retry on parse error
+                            setTimeout(poll, 30000); // Retry after 30s on parse error
                         }
                     } else {
-                        setTimeout(poll, 5000); // Retry on HTTP error
+                        setTimeout(poll, 30000); // Retry after 30s on HTTP error
                     }
                 }
             };
@@ -608,12 +609,13 @@ HTML_TODAY = """
                                     window.location.reload();
                                 }, 1000);
                             }
-                            poll();
+                            // Always wait 30 seconds before next poll
+                            setTimeout(poll, 30000);
                         } catch (e) {
-                            setTimeout(poll, 5000);
+                            setTimeout(poll, 30000);
                         }
                     } else {
-                        setTimeout(poll, 5000);
+                        setTimeout(poll, 30000);
                     }
                 }
             };
@@ -787,12 +789,13 @@ HTML_NUTRITION = """
                                     window.location.reload();
                                 }, 1000);
                             }
-                            poll();
+                            // Always wait 30 seconds before next poll
+                            setTimeout(poll, 30000);
                         } catch (e) {
-                            setTimeout(poll, 5000);
+                            setTimeout(poll, 30000);
                         }
                     } else {
-                        setTimeout(poll, 5000);
+                        setTimeout(poll, 30000);
                     }
                 }
             };
