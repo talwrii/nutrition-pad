@@ -321,17 +321,13 @@ HTML_INDEX = """
         }
     </style>
     <script>
-        var lastUpdate = 0;
+        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
+        var isPolling = false;
         
         function logFood(padKey, foodKey) {
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
             xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    // Don't reload immediately - long polling will handle it
-                }
-            };
             xhr.send(JSON.stringify({
                 pad: padKey,
                 food: foodKey
@@ -339,34 +335,38 @@ HTML_INDEX = """
         }
         
         function poll() {
+            if (isPolling) return; // Prevent multiple polls
+            isPolling = true;
+            
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
+                    isPolling = false;
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
-                            if (data.updated) {
-                                // Update the item count without full reload
+                            if (data.updated && data.timestamp > lastUpdate) {
+                                // Actually changed - update and reload
+                                lastUpdate = data.timestamp;
+                                localStorage.setItem('lastUpdate', lastUpdate.toString());
+                                
+                                // Update item count immediately
                                 var itemCountEl = document.querySelector('.item-count');
                                 if (itemCountEl) {
                                     itemCountEl.textContent = data.item_count + ' items logged today';
                                 }
-                                lastUpdate = data.timestamp;
                                 
-                                // Reload page after brief delay
+                                // Reload to show new food entries
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 1000);
+                                return; // Don't schedule next poll - page will reload
                             }
-                            // Always wait 30 seconds before next poll
-                            setTimeout(poll, 30000);
-                        } catch (e) {
-                            setTimeout(poll, 30000); // Retry after 30s on parse error
-                        }
-                    } else {
-                        setTimeout(poll, 30000); // Retry after 30s on HTTP error
+                        } catch (e) {}
                     }
+                    // Only schedule next poll if we're not reloading
+                    setTimeout(poll, 30000);
                 }
             };
             xhr.send();
