@@ -642,35 +642,70 @@ HTML_TODAY = """
     </div>
     
     <script>
-        var lastUpdate = 0;
+        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
+        var isPolling = false;
+        var myNonce = null;
+        var debugMode = {{ 'true' if js_debug else 'false' }};
+        
+        function debug(msg) {
+            if (debugMode) {
+                console.log('[DEBUG TODAY] ' + msg);
+                var debugEl = document.getElementById('debug') || document.createElement('div');
+                if (!debugEl.id) {
+                    debugEl.id = 'debug';
+                    debugEl.style.cssText = 'position:fixed;top:0;right:0;background:blue;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
+                    document.body.appendChild(debugEl);
+                }
+                debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
+            }
+        }
         
         function poll() {
+            if (isPolling) {
+                debug('Poll already running, skipping');
+                return;
+            }
+            
+            isPolling = true;
+            debug('Starting poll, lastUpdate: ' + lastUpdate);
+            
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
+                    isPolling = false;
+                    
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
-                            if (data.updated) {
+                            debug('Poll response: updated=' + data.updated + ', nonce=' + data.nonce);
+                            
+                            if (data.updated && data.timestamp > lastUpdate) {
+                                lastUpdate = data.timestamp;
+                                localStorage.setItem('lastUpdate', lastUpdate.toString());
+                                
+                                // Today's log doesn't generate updates, so always refresh on changes
+                                debug('Refreshing - showing new logged items');
                                 var proteinEl = document.querySelector('.total-protein');
                                 if (proteinEl) {
                                     proteinEl.textContent = data.total_protein + 'g protein';
                                 }
-                                lastUpdate = data.timestamp;
                                 
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 1000);
+                                return;
+                            } else {
+                                debug('No updates');
                             }
-                            // Always wait 30 seconds before next poll
-                            setTimeout(poll, 30000);
                         } catch (e) {
-                            setTimeout(poll, 30000);
+                            debug('JSON parse error: ' + e.message);
                         }
                     } else {
-                        setTimeout(poll, 30000);
+                        debug('HTTP error: ' + xhr.status);
                     }
+                    
+                    setTimeout(poll, 30000);
                 }
             };
             xhr.send();
@@ -826,31 +861,66 @@ HTML_NUTRITION = """
     </div>
     
     <script>
-        var lastUpdate = 0;
+        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
+        var isPolling = false;
+        var myNonce = null;
+        var debugMode = {{ 'true' if js_debug else 'false' }};
+        
+        function debug(msg) {
+            if (debugMode) {
+                console.log('[DEBUG NUTRITION] ' + msg);
+                var debugEl = document.getElementById('debug') || document.createElement('div');
+                if (!debugEl.id) {
+                    debugEl.id = 'debug';
+                    debugEl.style.cssText = 'position:fixed;top:0;right:0;background:green;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
+                    document.body.appendChild(debugEl);
+                }
+                debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
+            }
+        }
         
         function poll() {
+            if (isPolling) {
+                debug('Poll already running, skipping');
+                return;
+            }
+            
+            isPolling = true;
+            debug('Starting poll, lastUpdate: ' + lastUpdate);
+            
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
+                    isPolling = false;
+                    
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
-                            if (data.updated) {
+                            debug('Poll response: updated=' + data.updated + ', nonce=' + data.nonce);
+                            
+                            if (data.updated && data.timestamp > lastUpdate) {
                                 lastUpdate = data.timestamp;
-                                // Reload to update nutrition stats
+                                localStorage.setItem('lastUpdate', lastUpdate.toString());
+                                
+                                // Nutrition dashboard doesn't generate updates, so always refresh on changes
+                                debug('Refreshing - showing updated nutrition stats');
+                                
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 1000);
+                                return;
+                            } else {
+                                debug('No updates');
                             }
-                            // Always wait 30 seconds before next poll
-                            setTimeout(poll, 30000);
                         } catch (e) {
-                            setTimeout(poll, 30000);
+                            debug('JSON parse error: ' + e.message);
                         }
                     } else {
-                        setTimeout(poll, 30000);
+                        debug('HTTP error: ' + xhr.status);
                     }
+                    
+                    setTimeout(poll, 30000);
                 }
             };
             xhr.send();
@@ -1026,7 +1096,8 @@ def today_log():
     
     return render_template_string(HTML_TODAY,
                                 log_entries=log_entries,
-                                total_protein=total_protein)
+                                total_protein=total_protein,
+                                js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/nutrition')
 def nutrition_dashboard():
@@ -1037,7 +1108,8 @@ def nutrition_dashboard():
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
                                 total_protein=stats['total_protein'],
-                                avg_ratio=stats['avg_ratio'])
+                                avg_ratio=stats['avg_ratio'],
+                                js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/log', methods=['POST'])
 def log_food():
