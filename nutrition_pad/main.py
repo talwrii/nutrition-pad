@@ -324,20 +324,37 @@ HTML_INDEX = """
     <script>
         var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
         var isPolling = false;
-        var myNonce = null; // Track our own updates
+        var myNonce = null;
+        var debugMode = {{ 'true' if js_debug else 'false' }}; // Controlled by --js-debug flag
+        
+        function debug(msg) {
+            if (debugMode) {
+                console.log('[DEBUG] ' + msg);
+                // Also show on page for easier debugging on tablet
+                var debugEl = document.getElementById('debug') || document.createElement('div');
+                if (!debugEl.id) {
+                    debugEl.id = 'debug';
+                    debugEl.style.cssText = 'position:fixed;top:0;right:0;background:red;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
+                    document.body.appendChild(debugEl);
+                }
+                debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
+            }
+        }
         
         function generateNonce() {
-            return Date.now().toString() + Math.random().toString(36);
+            return Date.now().toString() + Math.random().toString(36).substr(2);
         }
         
         function logFood(padKey, foodKey) {
             myNonce = generateNonce();
+            debug('Logging food with nonce: ' + myNonce);
+            
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status === 200) {
-                    // Update item count immediately since we know what happened
+                    debug('Food logged successfully');
                     var itemCountEl = document.querySelector('.item-count');
                     if (itemCountEl) {
                         var currentCount = parseInt(itemCountEl.textContent) || 0;
@@ -353,23 +370,35 @@ HTML_INDEX = """
         }
         
         function poll() {
-            if (isPolling) return;
+            if (isPolling) {
+                debug('Poll already running, skipping');
+                return;
+            }
+            
             isPolling = true;
+            debug('Starting poll, lastUpdate: ' + lastUpdate);
             
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
                     isPolling = false;
+                    
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
+                            debug('Poll response: updated=' + data.updated + ', nonce=' + data.nonce + ', myNonce=' + myNonce);
+                            
                             if (data.updated && data.timestamp > lastUpdate) {
                                 lastUpdate = data.timestamp;
                                 localStorage.setItem('lastUpdate', lastUpdate.toString());
                                 
-                                // Only refresh if this isn't our own update
-                                if (data.nonce !== myNonce) {
+                                // Simple comparison - if nonces match exactly, skip refresh
+                                if (data.nonce && myNonce && data.nonce === myNonce) {
+                                    debug('Skipping refresh - this was my update');
+                                    myNonce = null; // Clear for next time
+                                } else {
+                                    debug('Refreshing - update from other device');
                                     var itemCountEl = document.querySelector('.item-count');
                                     if (itemCountEl) {
                                         itemCountEl.textContent = data.item_count + ' items logged today';
@@ -379,13 +408,18 @@ HTML_INDEX = """
                                         window.location.reload();
                                     }, 1000);
                                     return;
-                                } else {
-                                    // Clear our nonce since we've seen our own update
-                                    myNonce = null;
                                 }
+                            } else {
+                                debug('No updates');
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            debug('JSON parse error: ' + e.message);
+                        }
+                    } else {
+                        debug('HTTP error: ' + xhr.status);
                     }
+                    
+                    // Schedule next poll
                     setTimeout(poll, 30000);
                 }
             };
@@ -982,7 +1016,8 @@ def index():
                                 current_pad=current_pad,
                                 current_pad_data=current_pad_data,
                                 daily_total=daily_total,
-                                item_count=item_count)
+                                item_count=item_count,
+                                js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/today')
 def today_log():
@@ -1039,11 +1074,17 @@ def main():
     parser.add_argument('--host', default='localhost', help='Host IP')
     parser.add_argument('--port', type=int, default=5001, help='Port')
     parser.add_argument('--debug', action='store_true', help='Debug mode')
+    parser.add_argument('--js-debug', action='store_true', help='Enable JavaScript debugging')
     args = parser.parse_args()
     
     print("Starting Nutrition Pad on http://{}:{}".format(args.host, args.port))
     print("Config file: {}".format(CONFIG_FILE))
     print("Logs directory: {}".format(LOGS_DIR))
+    if args.js_debug:
+        print("JavaScript debugging enabled")
+    
+    # Store js_debug flag globally for templates
+    app.config['JS_DEBUG'] = args.js_debug
     
     app.run(debug=args.debug, host=args.host, port=args.port, threaded=True)
 
