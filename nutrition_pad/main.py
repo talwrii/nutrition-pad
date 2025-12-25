@@ -22,18 +22,22 @@ name = "Proteins"
 [pads.proteins.foods.chicken_breast]
 name = "Chicken Breast (4oz)"
 calories = 165
+protein = 31
 
 [pads.proteins.foods.ground_beef]
 name = "Ground Beef (4oz)"
 calories = 280
+protein = 22
 
 [pads.proteins.foods.salmon]
 name = "Salmon (4oz)"
 calories = 200
+protein = 28
 
 [pads.proteins.foods.eggs]
 name = "Eggs (2 large)"
 calories = 140
+protein = 12
 
 [pads.vegetables]
 name = "Vegetables"
@@ -41,14 +45,17 @@ name = "Vegetables"
 [pads.vegetables.foods.broccoli]
 name = "Broccoli (1 cup)"
 calories = 25
+protein = 3
 
 [pads.vegetables.foods.spinach]
 name = "Spinach (1 cup)"
 calories = 7
+protein = 1
 
 [pads.vegetables.foods.carrots]
 name = "Carrots (1 cup)"
 calories = 50
+protein = 1
 
 [pads.carbs]
 name = "Carbs"
@@ -56,14 +63,17 @@ name = "Carbs"
 [pads.carbs.foods.rice]
 name = "Rice (1 cup)"
 calories = 200
+protein = 4
 
 [pads.carbs.foods.bread]
 name = "Bread (1 slice)"
 calories = 80
+protein = 3
 
 [pads.carbs.foods.pasta]
 name = "Pasta (1 cup)"
 calories = 180
+protein = 7
 
 [pads.quick]
 name = "Quick Add"
@@ -71,14 +81,17 @@ name = "Quick Add"
 [pads.quick.foods.coffee]
 name = "Black Coffee"
 calories = 5
+protein = 0
 
 [pads.quick.foods.water]
 name = "Water"
 calories = 0
+protein = 0
 
 [pads.quick.foods.tea]
 name = "Tea"
 calories = 2
+protein = 0
 """
 
 # --- HTML TEMPLATES ---
@@ -119,6 +132,15 @@ HTML_INDEX = """
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: -1px;
+        }
+        
+        .item-count {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #4ecdc4;
+            text-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
         }
         
         .daily-total {
@@ -369,6 +391,7 @@ HTML_INDEX = """
                 var foods = pads[padKey].foods;
                 for (var foodKey in foods) {
                     var food = foods[foodKey];
+                    var ratio = food.calories > 0 ? (food.protein / food.calories).toFixed(2) : '0.00';
                     var btn = document.createElement('div');
                     btn.className = 'food-btn';
                     btn.setAttribute('data-food', foodKey);
@@ -379,7 +402,7 @@ HTML_INDEX = """
                     
                     btn.innerHTML = 
                         '<div class="food-name">' + food.name + '</div>' +
-                        '<div class="food-calories">' + food.calories + ' cal</div>';
+                        '<div class="food-calories">' + ratio + ' p/cal</div>';
                     
                     grid.appendChild(btn);
                 }
@@ -406,6 +429,10 @@ HTML_INDEX = """
             window.location.href = '/today';
         }
         
+        function showNutrition() {
+            window.location.href = '/nutrition';
+        }
+        
         // Initialize first pad on load
         function onLoad() {
             showPad(currentPad);
@@ -423,6 +450,7 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
+        <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
     <div class="nav-tabs">
@@ -440,8 +468,207 @@ HTML_INDEX = """
     </div>
     
     <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="showTodayLog()">
+        <button class="bottom-nav-btn" onclick="showTodayLog()" style="margin-bottom: 10px;">
             View Today's Log
+        </button>
+        <button class="bottom-nav-btn" onclick="showNutrition()" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
+            Nutrition Dashboard
+        </button>
+    </div>
+</body>
+</html>
+"""
+
+HTML_NUTRITION = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nutrition Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff; 
+            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .nutrition-stats {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value.calories { color: #ff6b6b; }
+        .stat-value.protein { color: #4ecdc4; }
+        .stat-value.ratio { color: #00d4ff; }
+        
+        .stat-label {
+            font-size: 1em;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .log-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .log-item {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .log-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+        
+        .log-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .log-item-name {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .log-item-nutrition {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9em;
+        }
+        
+        .nutrition-value {
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        
+        .calories { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+        .protein { background: rgba(78, 205, 196, 0.2); color: #4ecdc4; }
+        .ratio { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
+        
+        .log-item-time {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .no-entries {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.2em;
+            margin: 50px 0;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .bottom-nav-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .bottom-nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Nutrition Dashboard</h1>
+    </div>
+    
+    <div class="nutrition-stats">
+        <div class="stat-cards">
+            <div class="stat-card">
+                <div class="stat-value calories">{{ total_calories }}</div>
+                <div class="stat-label">Calories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value protein">{{ total_protein }}g</div>
+                <div class="stat-label">Protein</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value ratio">{{ avg_ratio }}</div>
+                <div class="stat-label">Avg P/Cal</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bottom-nav">
+        <button class="bottom-nav-btn" onclick="window.location.href='/'">
+            Back to Food Pads
         </button>
     </div>
 </body>
@@ -483,7 +710,7 @@ HTML_TODAY = """
             letter-spacing: -1px;
         }
         
-        .total-calories {
+        .total-protein {
             font-size: 2em;
             margin-top: 15px;
             color: #00d4ff;
@@ -575,7 +802,7 @@ HTML_TODAY = """
 <body>
     <div class="header">
         <h1>Today's Log</h1>
-        <div class="total-calories">{{ total_calories }} calories</div>
+        <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
     
     <div class="log-container">
@@ -584,7 +811,7 @@ HTML_TODAY = """
             <div class="log-item">
                 <div class="log-item-header">
                     <div class="log-item-name">{{ entry.name }}</div>
-                    <div class="log-item-cal">{{ entry.calories }} cal</div>
+                    <div class="log-item-cal">{{ entry.protein }}g ({{ "%.2f"|format(entry.protein / entry.calories if entry.calories > 0 else 0) }} p/cal)</div>
                 </div>
                 <div class="log-item-time">{{ entry.time }}</div>
             </div>
@@ -639,6 +866,7 @@ def save_food_entry(pad_key, food_key, food_data):
         'food': food_key,
         'name': food_data['name'],
         'calories': food_data['calories'],
+        'protein': food_data.get('protein', 0),
         'timestamp': datetime.now().isoformat()
     }
     
@@ -648,9 +876,36 @@ def save_food_entry(pad_key, food_key, food_data):
         json.dump(log, f, indent=2)
 
 def calculate_daily_total():
-    """Calculate total calories for today"""
+    """Calculate total protein for today"""
     log = load_today_log()
-    return sum(entry['calories'] for entry in log)
+    return sum(entry.get('protein', 0) for entry in log)
+
+def calculate_daily_item_count():
+    """Calculate total items logged for today"""
+    log = load_today_log()
+    return len(log)
+
+def calculate_nutrition_stats():
+    """Calculate comprehensive nutrition stats for today"""
+    log = load_today_log()
+    
+    if not log:
+        return {
+            'total_calories': 0,
+            'total_protein': 0,
+            'avg_ratio': '0.00'
+        }
+    
+    total_calories = sum(entry.get('calories', 0) for entry in log)
+    total_protein = sum(entry.get('protein', 0) for entry in log)
+    
+    avg_ratio = total_protein / total_calories if total_calories > 0 else 0
+    
+    return {
+        'total_calories': total_calories,
+        'total_protein': total_protein,
+        'avg_ratio': f"{avg_ratio:.2f}"
+    }
 
 # --- ROUTES ---
 
@@ -659,6 +914,7 @@ def index():
     config = load_config()
     pads = config.get('pads', {})
     daily_total = calculate_daily_total()
+    item_count = calculate_daily_item_count()
     
     # Get first pad key for JavaScript initialization
     first_pad_key = list(pads.keys())[0] if pads else ""
@@ -666,17 +922,29 @@ def index():
     return render_template_string(HTML_INDEX,
                                 pads=pads,
                                 daily_total=daily_total,
+                                item_count=item_count,
                                 first_pad_key=first_pad_key,
                                 pads_json=json.dumps(pads))
 
 @app.route('/today')
 def today_log():
     log_entries = load_today_log()
-    total_calories = calculate_daily_total()
+    total_protein = calculate_daily_total()
     
     return render_template_string(HTML_TODAY,
                                 log_entries=log_entries,
-                                total_calories=total_calories)
+                                total_protein=total_protein)
+
+@app.route('/nutrition')
+def nutrition_dashboard():
+    log_entries = load_today_log()
+    stats = calculate_nutrition_stats()
+    
+    return render_template_string(HTML_NUTRITION,
+                                log_entries=log_entries,
+                                total_calories=stats['total_calories'],
+                                total_protein=stats['total_protein'],
+                                avg_ratio=stats['avg_ratio'])
 
 @app.route('/log', methods=['POST'])
 def log_food():
