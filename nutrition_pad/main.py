@@ -4,9 +4,16 @@ import os
 import json
 import argparse
 import toml
+import time
+import threading
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# Long polling update tracking
+last_update = time.time()
+update_lock = threading.Lock()
+update_event = threading.Event()
 
 CONFIG_FILE = 'foods.toml'
 LOGS_DIR = 'daily_logs'
@@ -314,14 +321,15 @@ HTML_INDEX = """
         }
     </style>
     <script>
+        var lastUpdate = 0;
+        
         function logFood(padKey, foodKey) {
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status === 200) {
-                    // Reload page to update totals
-                    window.location.reload();
+                    // Don't reload immediately - long polling will handle it
                 }
             };
             xhr.send(JSON.stringify({
@@ -330,12 +338,58 @@ HTML_INDEX = """
             }));
         }
         
+        function poll() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.updated) {
+                                // Update the item count without full reload
+                                var itemCountEl = document.querySelector('.item-count');
+                                if (itemCountEl) {
+                                    itemCountEl.textContent = data.item_count + ' items logged today';
+                                }
+                                lastUpdate = data.timestamp;
+                                
+                                // Reload page after brief delay
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                            poll(); // Start next poll immediately
+                        } catch (e) {
+                            setTimeout(poll, 5000); // Retry on parse error
+                        }
+                    } else {
+                        setTimeout(poll, 5000); // Retry on HTTP error
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        function startLongPolling() {
+            poll();
+        }
+        
         function showTodayLog() {
             window.location.href = '/today';
         }
         
         function showNutrition() {
             window.location.href = '/nutrition';
+        }
+        
+        // Start long polling when page loads
+        if (window.addEventListener) {
+            window.addEventListener('load', startLongPolling, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', startLongPolling);
+        } else {
+            window.onload = startLongPolling;
         }
     </script>
 </head>
@@ -531,6 +585,54 @@ HTML_TODAY = """
             Back to Food Pads
         </button>
     </div>
+    
+    <script>
+        var lastUpdate = 0;
+        
+        function poll() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.updated) {
+                                var proteinEl = document.querySelector('.total-protein');
+                                if (proteinEl) {
+                                    proteinEl.textContent = data.total_protein + 'g protein';
+                                }
+                                lastUpdate = data.timestamp;
+                                
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                            poll();
+                        } catch (e) {
+                            setTimeout(poll, 5000);
+                        }
+                    } else {
+                        setTimeout(poll, 5000);
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        function startLongPolling() {
+            poll();
+        }
+        
+        // Start long polling when page loads  
+        if (window.addEventListener) {
+            window.addEventListener('load', startLongPolling, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', startLongPolling);
+        } else {
+            window.onload = startLongPolling;
+        }
+    </script>
 </body>
 </html>
 """
@@ -666,6 +768,50 @@ HTML_NUTRITION = """
             Back to Food Pads
         </button>
     </div>
+    
+    <script>
+        var lastUpdate = 0;
+        
+        function poll() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.updated) {
+                                lastUpdate = data.timestamp;
+                                // Reload to update nutrition stats
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                            poll();
+                        } catch (e) {
+                            setTimeout(poll, 5000);
+                        }
+                    } else {
+                        setTimeout(poll, 5000);
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        function startLongPolling() {
+            poll();
+        }
+        
+        // Start long polling when page loads
+        if (window.addEventListener) {
+            window.addEventListener('load', startLongPolling, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', startLongPolling);
+        } else {
+            window.onload = startLongPolling;
+        }
+    </script>
 </body>
 </html>
 """
@@ -746,7 +892,47 @@ def calculate_nutrition_stats():
         'avg_ratio': f"{avg_ratio:.2f}"
     }
 
+def mark_updated():
+    """Mark that data has been updated for long polling"""
+    global last_update
+    with update_lock:
+        last_update = time.time()
+    # Wake up all waiting threads immediately
+    update_event.set()
+    # Clear the event after a brief moment so it's ready for next update
+    threading.Timer(0.1, update_event.clear).start()
+
 # --- ROUTES ---
+@app.route('/poll-updates')
+def poll_updates():
+    """Long polling endpoint using threading events"""
+    since = float(request.args.get('since', 0))
+    timeout = 30  # 30 second timeout
+    
+    # Check if already updated before waiting
+    with update_lock:
+        if last_update > since:
+            return jsonify({
+                'updated': True,
+                'timestamp': last_update,
+                'item_count': calculate_daily_item_count(),
+                'total_protein': calculate_daily_total()
+            })
+    
+    # Wait for update event or timeout
+    event_occurred = update_event.wait(timeout)
+    
+    if event_occurred:
+        with update_lock:
+            if last_update > since:
+                return jsonify({
+                    'updated': True,
+                    'timestamp': last_update,
+                    'item_count': calculate_daily_item_count(),
+                    'total_protein': calculate_daily_total()
+                })
+    
+    return jsonify({'updated': False})
 @app.route('/')
 def index():
     config = load_config()
@@ -814,6 +1000,9 @@ def log_food():
     
     food_data = config['pads'][pad_key]['foods'][food_key]
     save_food_entry(pad_key, food_key, food_data)
+    
+    # Mark that data has been updated for long polling
+    mark_updated()
     
     return jsonify({'status': 'success'})
 
