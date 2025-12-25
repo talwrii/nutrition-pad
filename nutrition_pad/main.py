@@ -1,0 +1,723 @@
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify
+from datetime import datetime, date
+import os
+import json
+import argparse
+import toml
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
+
+CONFIG_FILE = 'foods.toml'
+LOGS_DIR = 'daily_logs'
+
+# Create logs directory if it doesn't exist
+if not os.path.exists(LOGS_DIR):
+    os.makedirs(LOGS_DIR)
+
+# --- DEFAULT CONFIG ---
+DEFAULT_CONFIG = """[pads.proteins]
+name = "Proteins"
+
+[pads.proteins.foods.chicken_breast]
+name = "Chicken Breast (4oz)"
+calories = 165
+
+[pads.proteins.foods.ground_beef]
+name = "Ground Beef (4oz)"
+calories = 280
+
+[pads.proteins.foods.salmon]
+name = "Salmon (4oz)"
+calories = 200
+
+[pads.proteins.foods.eggs]
+name = "Eggs (2 large)"
+calories = 140
+
+[pads.vegetables]
+name = "Vegetables"
+
+[pads.vegetables.foods.broccoli]
+name = "Broccoli (1 cup)"
+calories = 25
+
+[pads.vegetables.foods.spinach]
+name = "Spinach (1 cup)"
+calories = 7
+
+[pads.vegetables.foods.carrots]
+name = "Carrots (1 cup)"
+calories = 50
+
+[pads.carbs]
+name = "Carbs"
+
+[pads.carbs.foods.rice]
+name = "Rice (1 cup)"
+calories = 200
+
+[pads.carbs.foods.bread]
+name = "Bread (1 slice)"
+calories = 80
+
+[pads.carbs.foods.pasta]
+name = "Pasta (1 cup)"
+calories = 180
+
+[pads.quick]
+name = "Quick Add"
+
+[pads.quick.foods.coffee]
+name = "Black Coffee"
+calories = 5
+
+[pads.quick.foods.water]
+name = "Water"
+calories = 0
+
+[pads.quick.foods.tea]
+name = "Tea"
+calories = 2
+"""
+
+# --- HTML TEMPLATES ---
+
+HTML_INDEX = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Food Pads</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff; 
+            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .daily-total {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 1.8em;
+            font-weight: 600;
+            color: #00d4ff;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+        
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+            margin: 30px 20px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 8px;
+            backdrop-filter: blur(20px);
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 1.1em;
+            font-weight: 600;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tab-btn.active {
+            background: linear-gradient(135deg, #00d4ff, #4ecdc4);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        
+        .tab-btn:hover:not(.active) {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .food-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            padding: 30px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .food-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 25px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .food-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s;
+        }
+        
+        .food-btn:hover::before {
+            left: 100%;
+        }
+        
+        .food-btn:hover {
+            transform: translateY(-8px) scale(1.02);
+            border-color: #00d4ff;
+            box-shadow: 0 20px 40px rgba(0, 212, 255, 0.2);
+            background: rgba(0, 212, 255, 0.1);
+        }
+        
+        .food-btn:active {
+            transform: translateY(-4px) scale(0.98);
+        }
+        
+        .food-name {
+            font-size: 1.4em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            line-height: 1.2;
+        }
+        
+        .food-calories {
+            font-size: 1.1em;
+            color: #00d4ff;
+            font-weight: 600;
+        }
+        
+        .today-log {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .log-title {
+            text-align: center;
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: #00d4ff;
+        }
+        
+        .log-item {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .log-item-name {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .log-item-cal {
+            font-size: 1.2em;
+            color: #4ecdc4;
+            font-weight: 700;
+        }
+        
+        .log-item-time {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 5px;
+        }
+        
+        .no-foods {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.2em;
+            margin: 50px 0;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .bottom-nav-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .bottom-nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .food-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                padding: 20px 15px;
+            }
+            
+            .food-btn {
+                padding: 20px 15px;
+                min-height: 100px;
+            }
+            
+            .food-name {
+                font-size: 1.1em;
+            }
+            
+            .food-calories {
+                font-size: 1em;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .daily-total {
+                font-size: 1.4em;
+            }
+        }
+        
+        .hidden { display: none; }
+    </style>
+    <script>
+        var currentPad = "{{ first_pad_key }}";
+        var pads = {{ pads_json|safe }};
+        
+        function showPad(padKey) {
+            currentPad = padKey;
+            
+            // Update tab buttons
+            var tabs = document.getElementsByClassName('tab-btn');
+            for (var i = 0; i < tabs.length; i++) {
+                if (tabs[i].getAttribute('data-pad') === padKey) {
+                    tabs[i].className = 'tab-btn active';
+                } else {
+                    tabs[i].className = 'tab-btn';
+                }
+            }
+            
+            // Update food grid
+            var grid = document.getElementById('food-grid');
+            grid.innerHTML = '';
+            
+            if (pads[padKey] && pads[padKey].foods) {
+                var foods = pads[padKey].foods;
+                for (var foodKey in foods) {
+                    var food = foods[foodKey];
+                    var btn = document.createElement('div');
+                    btn.className = 'food-btn';
+                    btn.setAttribute('data-food', foodKey);
+                    btn.setAttribute('data-pad', padKey);
+                    btn.onclick = function() {
+                        logFood(this.getAttribute('data-pad'), this.getAttribute('data-food'));
+                    };
+                    
+                    btn.innerHTML = 
+                        '<div class="food-name">' + food.name + '</div>' +
+                        '<div class="food-calories">' + food.calories + ' cal</div>';
+                    
+                    grid.appendChild(btn);
+                }
+            }
+        }
+        
+        function logFood(padKey, foodKey) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/log', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    // Reload page to update totals
+                    window.location.reload();
+                }
+            };
+            xhr.send(JSON.stringify({
+                pad: padKey,
+                food: foodKey
+            }));
+        }
+        
+        function showTodayLog() {
+            window.location.href = '/today';
+        }
+        
+        // Initialize first pad on load
+        function onLoad() {
+            showPad(currentPad);
+        }
+        
+        if (window.addEventListener) {
+            window.addEventListener('load', onLoad, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', onLoad);
+        } else {
+            window.onload = onLoad;
+        }
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1>Food Pads</h1>
+        <div class="daily-total">{{ daily_total }} calories today</div>
+    </div>
+    
+    <div class="nav-tabs">
+        {% for pad_key, pad_data in pads.items() %}
+        <button class="tab-btn {% if loop.index0 == 0 %}active{% endif %}" 
+                data-pad="{{ pad_key }}" 
+                onclick="showPad('{{ pad_key }}')">
+            {{ pad_data.name }}
+        </button>
+        {% endfor %}
+    </div>
+    
+    <div id="food-grid" class="food-grid">
+        <!-- Foods populated by JavaScript -->
+    </div>
+    
+    <div class="bottom-nav">
+        <button class="bottom-nav-btn" onclick="showTodayLog()">
+            View Today's Log
+        </button>
+    </div>
+</body>
+</html>
+"""
+
+HTML_TODAY = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Today's Log</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff; 
+            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .total-calories {
+            font-size: 2em;
+            margin-top: 15px;
+            color: #00d4ff;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+        
+        .log-container {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        .log-item {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .log-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+        
+        .log-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .log-item-name {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .log-item-cal {
+            font-size: 1.2em;
+            color: #4ecdc4;
+            font-weight: 700;
+        }
+        
+        .log-item-time {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .no-entries {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.2em;
+            margin: 50px 0;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .bottom-nav-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .bottom-nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Today's Log</h1>
+        <div class="total-calories">{{ total_calories }} calories</div>
+    </div>
+    
+    <div class="log-container">
+        {% if log_entries %}
+            {% for entry in log_entries %}
+            <div class="log-item">
+                <div class="log-item-header">
+                    <div class="log-item-name">{{ entry.name }}</div>
+                    <div class="log-item-cal">{{ entry.calories }} cal</div>
+                </div>
+                <div class="log-item-time">{{ entry.time }}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-entries">No foods logged today</div>
+        {% endif %}
+    </div>
+    
+    <div class="bottom-nav">
+        <button class="bottom-nav-btn" onclick="window.location.href='/'">
+            Back to Food Pads
+        </button>
+    </div>
+</body>
+</html>
+"""
+
+# --- HELPER FUNCTIONS ---
+
+def load_config():
+    """Load TOML config file, create default if not exists"""
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'w') as f:
+            f.write(DEFAULT_CONFIG)
+    
+    with open(CONFIG_FILE, 'r') as f:
+        return toml.load(f)
+
+def get_today_log_file():
+    """Get path to today's log file"""
+    today = date.today().strftime('%Y-%m-%d')
+    return os.path.join(LOGS_DIR, f'{today}.json')
+
+def load_today_log():
+    """Load today's food log"""
+    log_file = get_today_log_file()
+    if not os.path.exists(log_file):
+        return []
+    
+    with open(log_file, 'r') as f:
+        return json.load(f)
+
+def save_food_entry(pad_key, food_key, food_data):
+    """Save a food entry to today's log"""
+    log_file = get_today_log_file()
+    log = load_today_log()
+    
+    entry = {
+        'time': datetime.now().strftime('%H:%M'),
+        'pad': pad_key,
+        'food': food_key,
+        'name': food_data['name'],
+        'calories': food_data['calories'],
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    log.append(entry)
+    
+    with open(log_file, 'w') as f:
+        json.dump(log, f, indent=2)
+
+def calculate_daily_total():
+    """Calculate total calories for today"""
+    log = load_today_log()
+    return sum(entry['calories'] for entry in log)
+
+# --- ROUTES ---
+
+@app.route('/')
+def index():
+    config = load_config()
+    pads = config.get('pads', {})
+    daily_total = calculate_daily_total()
+    
+    # Get first pad key for JavaScript initialization
+    first_pad_key = list(pads.keys())[0] if pads else ""
+    
+    return render_template_string(HTML_INDEX,
+                                pads=pads,
+                                daily_total=daily_total,
+                                first_pad_key=first_pad_key,
+                                pads_json=json.dumps(pads))
+
+@app.route('/today')
+def today_log():
+    log_entries = load_today_log()
+    total_calories = calculate_daily_total()
+    
+    return render_template_string(HTML_TODAY,
+                                log_entries=log_entries,
+                                total_calories=total_calories)
+
+@app.route('/log', methods=['POST'])
+def log_food():
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data'}), 400
+    
+    pad_key = data.get('pad')
+    food_key = data.get('food')
+    
+    if not pad_key or not food_key:
+        return jsonify({'error': 'Missing pad or food key'}), 400
+    
+    config = load_config()
+    
+    if pad_key not in config.get('pads', {}):
+        return jsonify({'error': 'Invalid pad'}), 400
+        
+    if food_key not in config['pads'][pad_key].get('foods', {}):
+        return jsonify({'error': 'Invalid food'}), 400
+    
+    food_data = config['pads'][pad_key]['foods'][food_key]
+    save_food_entry(pad_key, food_key, food_data)
+    
+    return jsonify({'status': 'success'})
+
+# --- MAIN ---
+
+def main():
+    parser = argparse.ArgumentParser(description="Calorie Counter")
+    parser.add_argument('--host', default='0.0.0.0', help='Host IP')
+    parser.add_argument('--port', type=int, default=5001, help='Port')
+    parser.add_argument('--debug', action='store_true', help='Debug mode')
+    args = parser.parse_args()
+
+    print("Starting Calorie Counter on http://{}:{}".format(args.host, args.port))
+    print("Config file: {}".format(CONFIG_FILE))
+    print("Logs directory: {}".format(LOGS_DIR))
+    
+    app.run(debug=args.debug, host=args.host, port=args.port, threaded=True)
+
+if __name__ == '__main__':
+    main()
