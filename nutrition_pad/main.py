@@ -754,6 +754,10 @@ HTML_FOOD_EDITOR = """
 def index():
     pads = get_all_pads()
     
+    # Always ensure amounts tab is available
+    if 'amounts' not in pads:
+        pads['amounts'] = {'name': 'Set Amount'}
+    
     # Get current pad from URL parameter  
     current_pad = request.args.get('pad', None)
     
@@ -764,7 +768,7 @@ def index():
         elif pads:
             current_pad = list(pads.keys())[0]
         else:
-            # No pads configured at all - this shouldn't happen with default config
+            # Fallback - should never happen now
             current_pad = 'amounts'
     
     # Get current pad data
