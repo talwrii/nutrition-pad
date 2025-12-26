@@ -15,9 +15,10 @@ protein_per_gram = 0.19   # 22g protein / 113g
 
 [pads.proteins.foods.salmon]
 name = "Salmon"
-type = "amount"
-calories_per_gram = 1.77  # 200 cal / 113g (4oz)
-protein_per_gram = 0.25   # 28g protein / 113g
+type = "unit"
+calories = 200  # 280 cal / 113g (4oz)
+protein_per_gram = 30   #
+
 
 [pads.proteins.foods.eggs]
 name = "Eggs (2 large)"

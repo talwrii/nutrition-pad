@@ -33,6 +33,24 @@ HTML_INDEX = """
     <link rel="stylesheet" href="/static/base.css">
     <style>
         /* App-specific styles that may change frequently */
+        .settings-cog {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .settings-cog:hover {
+            color: #ffd93d;
+            transform: rotate(90deg) scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        
         .tab-btn.amounts.active {
             background: linear-gradient(135deg, #ffd93d, #ff6b6b);
             box-shadow: 0 10px 30px rgba(255, 217, 61, 0.3);
@@ -150,6 +168,12 @@ HTML_INDEX = """
         }
         
         @media (max-width: 768px) {
+            .settings-cog {
+                font-size: 1.3em;
+                top: 15px;
+                right: 15px;
+            }
+            
             .amount-display {
                 font-size: 2.5em;
             }
@@ -212,6 +236,7 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
@@ -271,6 +296,33 @@ HTML_TODAY = """
     <title>Today's Log</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <style>
+        .settings-cog {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .settings-cog:hover {
+            color: #ffd93d;
+            transform: rotate(90deg) scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .settings-cog {
+                font-size: 1.3em;
+                top: 15px;
+                right: 15px;
+            }
+        }
+    </style>
     
     <script src="/static/polling.js"></script>
     <script>
@@ -313,6 +365,7 @@ HTML_TODAY = """
 <body>
     <div class="header">
         <h1>Today's Log</h1>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
         <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
     
@@ -351,6 +404,33 @@ HTML_NUTRITION = """
     <title>Nutrition Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <style>
+        .settings-cog {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .settings-cog:hover {
+            color: #ffd93d;
+            transform: rotate(90deg) scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .settings-cog {
+                font-size: 1.3em;
+                top: 15px;
+                right: 15px;
+            }
+        }
+    </style>
     
     <script src="/static/polling.js"></script>
     <script>
@@ -393,6 +473,7 @@ HTML_NUTRITION = """
 <body>
     <div class="header">
         <h1>Nutrition Dashboard</h1>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
     </div>
     
     <div class="nutrition-stats">
@@ -415,9 +496,6 @@ HTML_NUTRITION = """
     <div class="bottom-nav">
         <button class="bottom-nav-btn" onclick="window.location.href='/'">
             Back to Food Pads
-        </button>
-        <button class="bottom-nav-btn" onclick="window.location.href='/edit-foods'" style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4); margin-top: 10px;">
-            Edit Foods Configuration
         </button>
     </div>
 </body>
