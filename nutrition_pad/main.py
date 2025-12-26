@@ -416,7 +416,257 @@ HTML_NUTRITION = """
         <button class="bottom-nav-btn" onclick="window.location.href='/'">
             Back to Food Pads
         </button>
+        <button class="bottom-nav-btn" onclick="window.location.href='/edit-foods'" style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4); margin-top: 10px;">
+            Edit Foods Configuration
+        </button>
     </div>
+</body>
+</html>
+"""
+
+HTML_FOOD_EDITOR = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Foods Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/base.css">
+    <style>
+        .editor-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .editor-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .editor-header h2 {
+            color: #ffd93d;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .editor-header p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.1em;
+        }
+        
+        .editor-form {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .editor-textarea {
+            width: 100%;
+            min-height: 600px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+            tab-size: 2;
+        }
+        
+        .editor-textarea:focus {
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+        
+        .editor-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .editor-btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 15px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .save-btn {
+            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
+            color: white;
+        }
+        
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(78, 205, 196, 0.3);
+        }
+        
+        .cancel-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .cancel-btn:hover {
+            background: rgba(255, 107, 107, 0.2);
+            border-color: #ff6b6b;
+        }
+        
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 600;
+            display: none;
+        }
+        
+        .status-success {
+            background: rgba(78, 205, 196, 0.2);
+            border: 2px solid rgba(78, 205, 196, 0.5);
+            color: #4ecdc4;
+        }
+        
+        .status-error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 2px solid rgba(255, 107, 107, 0.5);
+            color: #ff6b6b;
+        }
+        
+        .help-text {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 217, 61, 0.1);
+            border: 1px solid rgba(255, 217, 61, 0.3);
+            border-radius: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .editor-container {
+                padding: 20px 15px;
+            }
+            
+            .editor-form {
+                padding: 20px;
+            }
+            
+            .editor-textarea {
+                min-height: 400px;
+                font-size: 12px;
+            }
+            
+            .editor-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Food Configuration Editor</h1>
+    </div>
+    
+    <div class="editor-container">
+        <div class="editor-header">
+            <h2>Edit foods.toml</h2>
+            <p>Modify your food database configuration</p>
+        </div>
+        
+        <div class="editor-form">
+            <div class="help-text">
+                <strong>💡 Tips:</strong><br>
+                • Use <code>type = "amount"</code> for foods measured in grams<br>
+                • Use <code>type = "unit"</code> for fixed serving sizes<br>
+                • Make sure to save your changes before leaving this page<br>
+                • Invalid TOML format will prevent saving
+            </div>
+            
+            <form id="foodsForm" onsubmit="saveFoods(event)">
+                <textarea id="foodsContent" class="editor-textarea" placeholder="Loading food configuration...">{{ foods_content }}</textarea>
+                
+                <div class="editor-buttons">
+                    <button type="submit" class="editor-btn save-btn">💾 Save Changes</button>
+                    <button type="button" class="editor-btn cancel-btn" onclick="window.location.href='/nutrition'">❌ Cancel</button>
+                </div>
+                
+                <div id="statusMessage" class="status-message"></div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function saveFoods(event) {
+            event.preventDefault();
+            
+            var content = document.getElementById('foodsContent').value;
+            var statusEl = document.getElementById('statusMessage');
+            var saveBtn = event.target.querySelector('.save-btn');
+            
+            // Disable save button
+            saveBtn.disabled = true;
+            saveBtn.textContent = '💾 Saving...';
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/edit-foods', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '💾 Save Changes';
+                    
+                    if (xhr.status === 200) {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            if (response.success) {
+                                showStatus('✅ Configuration saved! All devices will refresh automatically.', 'success');
+                                setTimeout(function() {
+                                    window.location.href = '/nutrition';
+                                }, 2000);
+                            } else {
+                                showStatus('❌ Error: ' + (response.error || 'Failed to save'), 'error');
+                            }
+                        } catch (e) {
+                            showStatus('❌ Error parsing response', 'error');
+                        }
+                    } else {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            showStatus('❌ Error: ' + (response.error || 'Failed to save'), 'error');
+                        } catch (e) {
+                            showStatus('❌ Server error: ' + xhr.status, 'error');
+                        }
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({ content: content }));
+        }
+        
+        function showStatus(message, type) {
+            var statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = 'status-message status-' + type;
+            statusEl.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(function() {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+    </script>
 </body>
 </html>
 """
@@ -485,6 +735,58 @@ def nutrition_dashboard():
                                 total_protein=stats['total_protein'],
                                 avg_ratio=stats['avg_ratio'],
                                 js_debug=app.config.get('JS_DEBUG', False))
+
+@app.route('/edit-foods', methods=['GET', 'POST'])
+def edit_foods():
+    """Food configuration editor route"""
+    if request.method == 'GET':
+        # Load current food configuration
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                foods_content = f.read()
+        except FileNotFoundError:
+            foods_content = "# Food configuration file not found"
+        except Exception as e:
+            foods_content = f"# Error loading configuration: {str(e)}"
+        
+        return render_template_string(HTML_FOOD_EDITOR, 
+                                    foods_content=foods_content,
+                                    js_debug=app.config.get('JS_DEBUG', False))
+    
+    elif request.method == 'POST':
+        # Save food configuration
+        data = request.json
+        if not data or 'content' not in data:
+            return jsonify({'success': False, 'error': 'No content provided'}), 400
+        
+        content = data['content']
+        
+        # Validate TOML format
+        try:
+            toml.loads(content)
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Invalid TOML format: {str(e)}'}), 400
+        
+        # Save the file
+        try:
+            # Create backup first
+            backup_file = CONFIG_FILE + '.backup'
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r') as f:
+                    backup_content = f.read()
+                with open(backup_file, 'w') as f:
+                    f.write(backup_content)
+            
+            # Save new content
+            with open(CONFIG_FILE, 'w') as f:
+                f.write(content)
+            
+            # Trigger polling update to refresh all devices
+            mark_updated("config_updated")
+                
+            return jsonify({'success': True, 'message': 'Configuration saved successfully'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Failed to save file: {str(e)}'}), 500
 
 @app.route('/log', methods=['POST'])
 def log_food():
