@@ -782,6 +782,7 @@ def index():
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
     current_amount = get_current_amount()
+
     
     # Handle amounts tab content
     amounts_content = ""

@@ -30,16 +30,46 @@ AMOUNTS_TAB_HTML = """
 # JavaScript for amounts functionality
 AMOUNTS_JAVASCRIPT = """
 function getCurrentAmount() {
-    // Amount is now synced with server, get from page data initially
     var displayEl = document.querySelector('.current-amount, .amount-display');
+    debug('getCurrentAmount: displayEl = ' + (displayEl ? displayEl.textContent : 'null'));
+    
     if (displayEl) {
-        var match = displayEl.textContent.match(/(\\d+)g/);
-        if (match) return parseFloat(match[1]);
+        var match = displayEl.textContent.match(/(\d+\.?\d*)g/);
+        debug('getCurrentAmount: regex match = ' + (match ? match[1] : 'null'));
+        if (match) {
+            var amount = parseFloat(match[1]);
+            debug('getCurrentAmount: returning ' + amount);
+            return amount;
+        }
     }
+    debug('getCurrentAmount: falling back to 100');
     return 100;
 }
 
 function setCurrentAmount(amount) {
+    debug('=== setCurrentAmount called ===');
+    debug('Input amount: ' + amount + ' (type: ' + typeof amount + ')');
+    
+    // Check for problematic values
+    if (amount == 0) {
+        debug('WARNING: Amount is 0! Call stack:');
+        console.trace();
+    }
+    if (amount === undefined || amount === null) {
+        debug('WARNING: Amount is undefined/null! Call stack:');
+        console.trace();
+        amount = 100; // Force fallback
+    }
+    if (isNaN(amount)) {
+        debug('WARNING: Amount is NaN! Call stack:');
+        console.trace();
+        amount = 100; // Force fallback
+    }
+    
+    // Convert to number to be safe
+    amount = parseFloat(amount);
+    debug('Parsed amount: ' + amount);
+    
     // Generate nonce and set it so we don't refresh ourselves
     var nonce = generateNonce();
     debug('Setting amount with nonce: ' + nonce);
@@ -57,12 +87,24 @@ function setCurrentAmount(amount) {
             debug('Error setting amount: ' + xhr.status);
         }
     };
+    
+    debug('Sending to server: ' + JSON.stringify({amount: amount, nonce: nonce}));
     xhr.send(JSON.stringify({amount: amount, nonce: nonce}));
 }
 
 function updateAmountDisplay(amount) {
+    debug('updateAmountDisplay called with: ' + amount + ' (type: ' + typeof amount + ')');
+    
+    if (amount == 0) {
+        debug('WARNING: updateAmountDisplay received 0! Call stack:');
+        console.trace();
+    }
+    
     var amountEls = document.querySelectorAll('.current-amount, .amount-display');
+    debug('Found ' + amountEls.length + ' amount display elements');
+    
     amountEls.forEach(function(el) {
+        debug('Updating element from "' + el.textContent + '" to "' + amount + 'g"');
         el.textContent = amount + 'g';
     });
     
@@ -74,7 +116,10 @@ function updateAmountDisplay(amount) {
     
     var sliderEl = document.getElementById('amountSlider');
     if (sliderEl) {
+        debug('Updating slider from ' + sliderEl.value + ' to ' + amount);
         sliderEl.value = amount;
+    } else {
+        debug('Slider element not found');
     }
 }
 

@@ -11,7 +11,7 @@ last_update = time.time()
 update_lock = threading.Lock()
 update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
-current_amount = 100  # Server-side amount state
+current_amount = 100.0  # Server-side amount state - ensure it's a float
 
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
