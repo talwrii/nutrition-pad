@@ -2,9 +2,7 @@
 Amounts display and management functionality.
 Handles the amounts tab with slider, preset buttons, and amount setting.
 """
-
 from flask import render_template_string
-
 
 # HTML template for the amounts tab content
 AMOUNTS_TAB_HTML = """
@@ -42,6 +40,11 @@ function getCurrentAmount() {
 }
 
 function setCurrentAmount(amount) {
+    // Generate nonce and set it so we don't refresh ourselves
+    var nonce = generateNonce();
+    debug('Setting amount with nonce: ' + nonce);
+    setMyNonce(nonce);
+    
     // Send amount to server
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/set-amount', true);
@@ -50,14 +53,11 @@ function setCurrentAmount(amount) {
         if (xhr.readyState === 4 && xhr.status === 200) {
             debug('Amount set successfully to: ' + amount);
             updateAmountDisplay(amount);
-            // Update our local timestamp so we don't get our own update back
-            lastAmountUpdate = new Date().getTime() / 1000;
-            localStorage.setItem('lastAmountUpdate', lastAmountUpdate.toString());
         } else if (xhr.readyState === 4) {
             debug('Error setting amount: ' + xhr.status);
         }
     };
-    xhr.send(JSON.stringify({amount: amount}));
+    xhr.send(JSON.stringify({amount: amount, nonce: nonce}));
 }
 
 function updateAmountDisplay(amount) {
@@ -192,21 +192,17 @@ AMOUNTS_CSS = """
 }
 """
 
-
 def render_amounts_tab(current_amount):
     """Render the amounts tab content"""
     return render_template_string(AMOUNTS_TAB_HTML, current_amount=current_amount)
-
 
 def get_amounts_javascript():
     """Get the JavaScript code for amounts functionality"""
     return AMOUNTS_JAVASCRIPT
 
-
 def get_amounts_css():
     """Get the CSS styles for amounts functionality (for reference)"""
     return AMOUNTS_CSS
-
 
 def get_preset_amounts():
     """Get the list of preset amounts"""

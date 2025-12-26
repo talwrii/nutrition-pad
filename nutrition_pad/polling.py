@@ -2,11 +2,9 @@
 Long polling functionality for real-time updates across devices.
 Handles food log updates and amount synchronization.
 """
-
 import time
 import threading
 from flask import request, jsonify, Response
-
 
 # Long polling update tracking
 last_update = time.time()
@@ -14,7 +12,6 @@ update_lock = threading.Lock()
 update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100  # Server-side amount state
-amount_update = time.time()  # Track when amount was last updated
 
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
@@ -59,20 +56,25 @@ function poll() {
             if (xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    debug('Poll response: updated=' + data.updated + ', amount_changed=' + data.amount_changed + ', current_amount=' + data.current_amount);
+                    debug('Poll response: updated=' + data.updated + ', current_amount=' + data.current_amount);
                     
                     if (data.updated && data.timestamp > lastUpdate) {
                         lastUpdate = data.timestamp;
                         localStorage.setItem('lastUpdate', lastUpdate.toString());
                         
                         if (data.nonce && myNonce && data.nonce === myNonce) {
-                            debug('Skipping refresh - this was my update');
+                            debug('Skipping refresh - this was my update (nonce: ' + myNonce + ')');
                             myNonce = null;
                         } else {
-                            debug('Refreshing - update from other device');
+                            debug('Refreshing - update from other device (nonce: ' + data.nonce + ')');
                             var itemCountEl = document.querySelector('.item-count');
                             if (itemCountEl) {
                                 itemCountEl.textContent = data.item_count + ' items logged today';
+                            }
+                            
+                            // Update amount display too
+                            if (typeof updateAmountDisplay === 'function') {
+                                updateAmountDisplay(data.current_amount);
                             }
                             
                             setTimeout(function() {
@@ -82,25 +84,7 @@ function poll() {
                         }
                     }
                     
-                    // Check for amount changes separately
-                    if (data.amount_changed) {
-                        debug('Amount changed from server: ' + data.current_amount);
-                        lastAmountUpdate = new Date().getTime() / 1000;
-                        localStorage.setItem('lastAmountUpdate', lastAmountUpdate.toString());
-                        if (typeof updateAmountDisplay === 'function') {
-                            updateAmountDisplay(data.current_amount);
-                        }
-                        
-                        // Force update of amount indicators specifically
-                        var amountIndicators = document.querySelectorAll('.food-type-indicator.amount');
-                        debug('Found ' + amountIndicators.length + ' amount indicators to update');
-                        amountIndicators.forEach(function(el) {
-                            el.textContent = data.current_amount + 'g';
-                            debug('Updated indicator to: ' + data.current_amount + 'g');
-                        });
-                    }
-                    
-                    if (!data.updated && !data.amount_changed) {
+                    if (!data.updated) {
                         debug('No updates');
                     }
                 } catch (e) {
@@ -123,13 +107,13 @@ function startLongPolling() {
 // Expose functions that main.js might need
 function setMyNonce(nonce) {
     myNonce = nonce;
+    debug('Set my nonce to: ' + nonce);
 }
 
 function setDebugMode(enabled) {
     debugMode = enabled;
 }
 """
-
 
 def mark_updated(nonce=None):
     """Mark that data has been updated for long polling"""
@@ -140,16 +124,15 @@ def mark_updated(nonce=None):
     update_event.set()
     threading.Timer(0.1, update_event.clear).start()
 
-
-def mark_amount_updated():
+def mark_amount_updated(nonce=None):
     """Mark that amount has been updated"""
-    global amount_update
+    global last_update, current_nonce
     with update_lock:
-        amount_update = time.time()
+        last_update = time.time()
+        current_nonce = nonce
     # Use the same event mechanism to wake up long polling requests
     update_event.set()
     threading.Timer(0.1, update_event.clear).start()
-
 
 def poll_updates():
     """Long polling endpoint using threading events"""
@@ -160,17 +143,16 @@ def poll_updates():
     amount_since = float(request.args.get('amount_since', 0))
     timeout = 30
     
-    print(f"[DEBUG] Poll request: since={since}, amount_since={amount_since}, current_amount={current_amount}, amount_update={amount_update}")
+    print(f"[DEBUG] Poll request: since={since}, amount_since={amount_since}, current_amount={current_amount}")
     
     with update_lock:
-        if last_update > since or amount_update > amount_since:
+        if last_update > since:
             response = {
                 'updated': last_update > since,
                 'timestamp': last_update,
                 'item_count': calculate_daily_item_count(),
                 'total_protein': calculate_daily_total(),
                 'nonce': current_nonce,
-                'amount_changed': amount_update > amount_since,
                 'current_amount': current_amount
             }
             print(f"[DEBUG] Immediate response: {response}")
@@ -180,14 +162,13 @@ def poll_updates():
     
     if event_occurred:
         with update_lock:
-            if last_update > since or amount_update > amount_since:
+            if last_update > since:
                 response = {
                     'updated': last_update > since,
                     'timestamp': last_update,
                     'item_count': calculate_daily_item_count(),
                     'total_protein': calculate_daily_total(),
                     'nonce': current_nonce,
-                    'amount_changed': amount_update > amount_since,
                     'current_amount': current_amount
                 }
                 print(f"[DEBUG] Event response: {response}")
@@ -199,7 +180,6 @@ def poll_updates():
         'current_amount': current_amount
     })
 
-
 def set_amount():
     """Set the current amount"""
     global current_amount
@@ -210,6 +190,8 @@ def set_amount():
     
     try:
         new_amount = float(data['amount'])
+        nonce = data.get('nonce')  # Extract nonce from request
+        
         if new_amount < 0 or new_amount > 500:
             return jsonify({'error': 'Amount must be between 0 and 500'}), 400
         
@@ -217,24 +199,21 @@ def set_amount():
         with update_lock:
             current_amount = new_amount
         
-        print(f"[DEBUG] Amount changed from {old_amount} to {current_amount}")
-        mark_amount_updated()
-        print(f"[DEBUG] Amount update marked, new timestamp: {amount_update}")
+        print(f"[DEBUG] Amount changed from {old_amount} to {current_amount} (nonce: {nonce})")
+        mark_amount_updated(nonce)  # Pass nonce to mark_amount_updated
+        print(f"[DEBUG] Amount update marked, new timestamp: {last_update}")
         
         return jsonify({'status': 'success', 'amount': current_amount})
     except (ValueError, TypeError):
         return jsonify({'error': 'Invalid amount'}), 400
 
-
 def get_current_amount():
     """Get the current amount value"""
     return current_amount
 
-
 def get_polling_javascript():
     """Get the JavaScript code for polling functionality"""
     return POLLING_JAVASCRIPT
-
 
 def register_polling_routes(app):
     """Register polling routes with the Flask app"""
