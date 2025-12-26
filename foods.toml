@@ -1,0 +1,101 @@
+[pads.proteins]
+name = "Proteins"
+
+[pads.proteins.foods.chicken_breast]
+name = "Chicken Breast"
+type = "amount"
+calories_per_gram = 1.46  # 165 cal / 113g (4oz)
+protein_per_gram = 0.27   # 31g protein / 113g
+
+[pads.proteins.foods.ground_beef]
+name = "Ground Beef"
+type = "amount"
+calories_per_gram = 2.48  # 280 cal / 113g (4oz)
+protein_per_gram = 0.19   # 22g protein / 113g
+
+[pads.proteins.foods.salmon]
+name = "Salmon"
+type = "amount"
+calories_per_gram = 1.77  # 200 cal / 113g (4oz)
+protein_per_gram = 0.25   # 28g protein / 113g
+
+[pads.proteins.foods.eggs]
+name = "Eggs (2 large)"
+type = "unit"
+calories = 140
+protein = 12
+
+[pads.proteins.foods.greek_yogurt]
+name = "Greek Yogurt"
+type = "amount"
+calories_per_gram = 0.54  # 130 cal / 240g (1 cup)
+protein_per_gram = 0.083  # 20g protein / 240g
+
+[pads.vegetables]
+name = "Vegetables"
+
+[pads.vegetables.foods.broccoli]
+name = "Broccoli"
+type = "amount"
+calories_per_gram = 0.28  # 25 cal / 90g (1 cup)
+protein_per_gram = 0.033  # 3g protein / 90g
+
+[pads.vegetables.foods.spinach]
+name = "Spinach"
+type = "amount"
+calories_per_gram = 0.23  # 7 cal / 30g (1 cup)
+protein_per_gram = 0.033  # 1g protein / 30g
+
+[pads.vegetables.foods.carrots]
+name = "Carrots"
+type = "amount"
+calories_per_gram = 0.42  # 50 cal / 120g (1 cup)
+protein_per_gram = 0.008  # 1g protein / 120g
+
+[pads.vegetables.foods.bell_pepper]
+name = "Bell Pepper"
+type = "amount"
+calories_per_gram = 0.21  # 25 cal / 120g (1 medium)
+protein_per_gram = 0.008  # 1g protein / 120g
+
+[pads.vegetables.foods.cucumber]
+name = "Cucumber"
+type = "amount"
+calories_per_gram = 0.13  # 16 cal / 120g (1 cup)
+protein_per_gram = 0.008  # 1g protein / 120g
+
+[pads.carbs]
+name = "Carbs"
+
+[pads.carbs.foods.rice]
+name = "Rice (cooked)"
+type = "amount"
+calories_per_gram = 1.0   # 200 cal / 200g (1 cup cooked)
+protein_per_gram = 0.02   # 4g protein / 200g
+
+[pads.carbs.foods.bread]
+name = "Bread (1 slice)"
+type = "unit"
+calories = 80
+protein = 3
+
+[pads.carbs.foods.pasta]
+name = "Pasta (cooked)"
+type = "amount"
+calories_per_gram = 1.29  # 180 cal / 140g (1 cup cooked)
+protein_per_gram = 0.05   # 7g protein / 140g
+
+[pads.carbs.foods.oatmeal]
+name = "Oatmeal (cooked)"
+type = "amount"
+calories_per_gram = 0.625 # 150 cal / 240g (1 cup cooked)
+protein_per_gram = 0.021  # 5g protein / 240g
+
+[pads.carbs.foods.quinoa]
+name = "Quinoa (cooked)"
+type = "amount"
+calories_per_gram = 1.19  # 220 cal / 185g (1 cup cooked)
+protein_per_gram = 0.043  # 8g protein / 185g
+
+[pads.amounts]
+name = "Set Amount"

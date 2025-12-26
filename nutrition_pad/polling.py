@@ -5,7 +5,7 @@ Handles food log updates and amount synchronization.
 
 import time
 import threading
-from flask import request, jsonify
+from flask import request, jsonify, Response
 
 
 # Long polling update tracking
@@ -15,6 +15,120 @@ update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100  # Server-side amount state
 amount_update = time.time()  # Track when amount was last updated
+
+# JavaScript for polling functionality
+POLLING_JAVASCRIPT = """
+var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
+var lastAmountUpdate = parseFloat(localStorage.getItem('lastAmountUpdate') || '0');
+var isPolling = false;
+var myNonce = null;
+var debugMode = false; // Will be set by main template
+
+function debug(msg) {
+    if (debugMode) {
+        console.log('[DEBUG] ' + msg);
+        var debugEl = document.getElementById('debug') || document.createElement('div');
+        if (!debugEl.id) {
+            debugEl.id = 'debug';
+            debugEl.style.cssText = 'position:fixed;top:0;right:0;background:red;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
+            document.body.appendChild(debugEl);
+        }
+        debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
+    }
+}
+
+function generateNonce() {
+    return Date.now().toString() + Math.random().toString(36).substr(2);
+}
+
+function poll() {
+    if (isPolling) {
+        debug('Poll already running, skipping');
+        return;
+    }
+    
+    isPolling = true;
+    debug('Starting poll, lastUpdate: ' + lastUpdate + ', lastAmountUpdate: ' + lastAmountUpdate);
+    
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/poll-updates?since=' + lastUpdate + '&amount_since=' + lastAmountUpdate, true);
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            isPolling = false;
+            
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    debug('Poll response: updated=' + data.updated + ', amount_changed=' + data.amount_changed + ', current_amount=' + data.current_amount);
+                    
+                    if (data.updated && data.timestamp > lastUpdate) {
+                        lastUpdate = data.timestamp;
+                        localStorage.setItem('lastUpdate', lastUpdate.toString());
+                        
+                        if (data.nonce && myNonce && data.nonce === myNonce) {
+                            debug('Skipping refresh - this was my update');
+                            myNonce = null;
+                        } else {
+                            debug('Refreshing - update from other device');
+                            var itemCountEl = document.querySelector('.item-count');
+                            if (itemCountEl) {
+                                itemCountEl.textContent = data.item_count + ' items logged today';
+                            }
+                            
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 1000);
+                            return;
+                        }
+                    }
+                    
+                    // Check for amount changes separately
+                    if (data.amount_changed) {
+                        debug('Amount changed from server: ' + data.current_amount);
+                        lastAmountUpdate = new Date().getTime() / 1000;
+                        localStorage.setItem('lastAmountUpdate', lastAmountUpdate.toString());
+                        if (typeof updateAmountDisplay === 'function') {
+                            updateAmountDisplay(data.current_amount);
+                        }
+                        
+                        // Force update of amount indicators specifically
+                        var amountIndicators = document.querySelectorAll('.food-type-indicator.amount');
+                        debug('Found ' + amountIndicators.length + ' amount indicators to update');
+                        amountIndicators.forEach(function(el) {
+                            el.textContent = data.current_amount + 'g';
+                            debug('Updated indicator to: ' + data.current_amount + 'g');
+                        });
+                    }
+                    
+                    if (!data.updated && !data.amount_changed) {
+                        debug('No updates');
+                    }
+                } catch (e) {
+                    debug('JSON parse error: ' + e.message);
+                }
+            } else {
+                debug('HTTP error: ' + xhr.status);
+            }
+            
+            setTimeout(poll, 2000); // Poll every 2 seconds for immediate syncing
+        }
+    };
+    xhr.send();
+}
+
+function startLongPolling() {
+    poll();
+}
+
+// Expose functions that main.js might need
+function setMyNonce(nonce) {
+    myNonce = nonce;
+}
+
+function setDebugMode(enabled) {
+    debugMode = enabled;
+}
+"""
 
 
 def mark_updated(nonce=None):
@@ -117,6 +231,11 @@ def get_current_amount():
     return current_amount
 
 
+def get_polling_javascript():
+    """Get the JavaScript code for polling functionality"""
+    return POLLING_JAVASCRIPT
+
+
 def register_polling_routes(app):
     """Register polling routes with the Flask app"""
     
@@ -127,3 +246,7 @@ def register_polling_routes(app):
     @app.route('/set-amount', methods=['POST'])
     def set_amount_route():
         return set_amount()
+    
+    @app.route('/static/polling.js')
+    def polling_js():
+        return Response(POLLING_JAVASCRIPT, mimetype='application/javascript')

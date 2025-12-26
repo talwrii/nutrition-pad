@@ -8,13 +8,14 @@ import time
 import threading
 
 # Import our modules
-from .polling import register_polling_routes, get_current_amount, mark_updated
+from .polling import register_polling_routes, get_current_amount, mark_updated, get_polling_javascript
 from .amounts import render_amounts_tab, get_amounts_javascript
 from .data import (
     ensure_logs_directory, load_config, load_today_log, save_food_entry,
     calculate_daily_total, calculate_daily_item_count, calculate_nutrition_stats,
     validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR
 )
+from .styles import register_styles_routes
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -29,130 +30,12 @@ HTML_INDEX = """
 <head>
     <title>Food Pads</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/base.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #fff; 
-            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            overflow-x: hidden;
-            padding-bottom: 120px;
-        }
-        
-        .header {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            text-align: center;
-            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -1px;
-        }
-        
-        .current-amount {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 1.8em;
-            font-weight: 700;
-            color: #ffd93d;
-            text-shadow: 0 0 20px rgba(255, 217, 61, 0.3);
-        }
-        
-        .item-count {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 1.2em;
-            font-weight: 600;
-            color: #4ecdc4;
-            text-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
-        }
-        
-        .nav-tabs {
-            display: flex;
-            justify-content: center;
-            margin: 30px 20px 0;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            padding: 8px;
-            backdrop-filter: blur(20px);
-            flex-wrap: wrap;
-        }
-        
-        .tab-btn {
-            flex: 1;
-            min-width: 100px;
-            padding: 15px 20px;
-            background: none;
-            border: none;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 1.1em;
-            font-weight: 600;
-            border-radius: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            text-decoration: none;
-            display: block;
-            text-align: center;
-            margin: 2px;
-        }
-        
-        .tab-btn.active {
-            background: linear-gradient(135deg, #00d4ff, #4ecdc4);
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-        }
-        
+        /* App-specific styles that may change frequently */
         .tab-btn.amounts.active {
             background: linear-gradient(135deg, #ffd93d, #ff6b6b);
             box-shadow: 0 10px 30px rgba(255, 217, 61, 0.3);
-        }
-        
-        .tab-btn:hover:not(.active) {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-        }
-        
-        .food-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            padding: 30px 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .food-btn {
-            background: rgba(255, 255, 255, 0.08);
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-radius: 20px;
-            padding: 25px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(20px);
-            position: relative;
-            overflow: hidden;
-            text-align: center;
-            min-height: 120px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
         }
         
         .food-btn.amount-food {
@@ -165,18 +48,6 @@ HTML_INDEX = """
             background: rgba(78, 205, 196, 0.05);
         }
         
-        .food-type-indicator {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: rgba(0, 0, 0, 0.6);
-            color: white;
-            font-size: 0.75em;
-            padding: 4px 8px;
-            border-radius: 8px;
-            font-weight: 600;
-        }
-        
         .food-type-indicator.amount {
             background: rgba(255, 217, 61, 0.8);
             color: #1a1a2e;
@@ -187,45 +58,7 @@ HTML_INDEX = """
             color: #1a1a2e;
         }
         
-        .food-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transition: left 0.5s;
-        }
-        
-        .food-btn:hover::before {
-            left: 100%;
-        }
-        
-        .food-btn:hover {
-            transform: translateY(-8px) scale(1.02);
-            border-color: #00d4ff;
-            box-shadow: 0 20px 40px rgba(0, 212, 255, 0.2);
-            background: rgba(0, 212, 255, 0.1);
-        }
-        
-        .food-btn:active {
-            transform: translateY(-4px) scale(0.98);
-        }
-        
-        .food-name {
-            font-size: 1.4em;
-            font-weight: 700;
-            margin-bottom: 8px;
-            line-height: 1.2;
-        }
-        
-        .food-calories {
-            font-size: 1.1em;
-            color: #00d4ff;
-            font-weight: 600;
-        }
-        
+        /* Amounts-specific styles */
         .amounts-container {
             max-width: 600px;
             margin: 0 auto;
@@ -316,113 +149,25 @@ HTML_INDEX = """
             transform: translateY(-2px);
         }
         
-        .no-foods {
-            text-align: center;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 1.2em;
-            margin: 50px 0;
-            grid-column: 1 / -1;
-        }
-        
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(20px);
-            padding: 15px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .bottom-nav-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
-            border: none;
-            border-radius: 15px;
-            color: white;
-            font-size: 1.2em;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 10px;
-        }
-        
-        .bottom-nav-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
-        }
-        
-        /* Mobile optimizations */
         @media (max-width: 768px) {
-            .food-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                padding: 20px 15px;
-            }
-            
-            .food-btn {
-                padding: 20px 15px;
-                min-height: 100px;
-            }
-            
-            .food-name {
-                font-size: 1.1em;
-            }
-            
-            .food-calories {
-                font-size: 1em;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
-            
             .amount-display {
                 font-size: 2.5em;
             }
-            
-            .nav-tabs {
-                margin: 20px 10px 0;
-            }
-            
-            .tab-btn {
-                padding: 12px 15px;
-                font-size: 1em;
-            }
         }
     </style>
+    
+    <script src="/static/polling.js"></script>
     <script>
-        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
-        var lastAmountUpdate = parseFloat(localStorage.getItem('lastAmountUpdate') || '0');
-        var isPolling = false;
-        var myNonce = null;
-        var debugMode = {{ 'true' if js_debug else 'false' }};
+        // App-specific JavaScript
+        setDebugMode({{ 'true' if js_debug else 'false' }});
         
-        function debug(msg) {
-            if (debugMode) {
-                console.log('[DEBUG] ' + msg);
-                var debugEl = document.getElementById('debug') || document.createElement('div');
-                if (!debugEl.id) {
-                    debugEl.id = 'debug';
-                    debugEl.style.cssText = 'position:fixed;top:0;right:0;background:red;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
-                    document.body.appendChild(debugEl);
-                }
-                debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
-            }
-        }
-        
-        function generateNonce() {
-            return Date.now().toString() + Math.random().toString(36).substr(2);
-        }
-        
-        // Amounts functionality from amounts module
+        // Amounts functionality
         {{ amounts_javascript|safe }}
         
         function logFood(padKey, foodKey) {
-            myNonce = generateNonce();
-            debug('Logging food with nonce: ' + myNonce);
+            var nonce = generateNonce();
+            debug('Logging food with nonce: ' + nonce);
+            setMyNonce(nonce);
             
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/log', true);
@@ -440,85 +185,8 @@ HTML_INDEX = """
             xhr.send(JSON.stringify({
                 pad: padKey,
                 food: foodKey,
-                nonce: myNonce
+                nonce: nonce
             }));
-        }
-        
-        function poll() {
-            if (isPolling) {
-                debug('Poll already running, skipping');
-                return;
-            }
-            
-            isPolling = true;
-            debug('Starting poll, lastUpdate: ' + lastUpdate + ', lastAmountUpdate: ' + lastAmountUpdate);
-            
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/poll-updates?since=' + lastUpdate + '&amount_since=' + lastAmountUpdate, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    isPolling = false;
-                    
-                    if (xhr.status === 200) {
-                        try {
-                            var data = JSON.parse(xhr.responseText);
-                            debug('Poll response: updated=' + data.updated + ', amount_changed=' + data.amount_changed + ', current_amount=' + data.current_amount);
-                            
-                            if (data.updated && data.timestamp > lastUpdate) {
-                                lastUpdate = data.timestamp;
-                                localStorage.setItem('lastUpdate', lastUpdate.toString());
-                                
-                                if (data.nonce && myNonce && data.nonce === myNonce) {
-                                    debug('Skipping refresh - this was my update');
-                                    myNonce = null;
-                                } else {
-                                    debug('Refreshing - update from other device');
-                                    var itemCountEl = document.querySelector('.item-count');
-                                    if (itemCountEl) {
-                                        itemCountEl.textContent = data.item_count + ' items logged today';
-                                    }
-                                    
-                                    setTimeout(function() {
-                                        window.location.reload();
-                                    }, 1000);
-                                    return;
-                                }
-                            }
-                            
-                            // Check for amount changes separately
-                            if (data.amount_changed) {
-                                debug('Amount changed from server: ' + data.current_amount);
-                                lastAmountUpdate = new Date().getTime() / 1000;
-                                localStorage.setItem('lastAmountUpdate', lastAmountUpdate.toString());
-                                updateAmountDisplay(data.current_amount);
-                                
-                                // Force update of amount indicators specifically
-                                var amountIndicators = document.querySelectorAll('.food-type-indicator.amount');
-                                debug('Found ' + amountIndicators.length + ' amount indicators to update');
-                                amountIndicators.forEach(function(el) {
-                                    el.textContent = data.current_amount + 'g';
-                                    debug('Updated indicator to: ' + data.current_amount + 'g');
-                                });
-                            }
-                            
-                            if (!data.updated && !data.amount_changed) {
-                                debug('No updates');
-                            }
-                        } catch (e) {
-                            debug('JSON parse error: ' + e.message);
-                        }
-                    } else {
-                        debug('HTTP error: ' + xhr.status);
-                    }
-                    
-                    setTimeout(poll, 2000); // Poll every 2 seconds for immediate syncing
-                }
-            };
-            xhr.send();
-        }
-        
-        function startLongPolling() {
-            poll();
         }
         
         function showTodayLog() {
@@ -531,8 +199,12 @@ HTML_INDEX = """
         
         // Initialize when page loads
         window.onload = function() {
-            updateAmountDisplay(getCurrentAmount());
-            createPresetButtons();
+            if (typeof updateAmountDisplay === 'function') {
+                updateAmountDisplay(getCurrentAmount());
+            }
+            if (typeof createPresetButtons === 'function') {
+                createPresetButtons();
+            }
             startLongPolling();
         };
     </script>
@@ -598,146 +270,45 @@ HTML_TODAY = """
 <head>
     <title>Today's Log</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    <link rel="stylesheet" href="/static/base.css">
+    
+    <script src="/static/polling.js"></script>
+    <script>
+        setDebugMode({{ 'true' if js_debug else 'false' }});
         
-        body { 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #fff; 
-            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            padding-bottom: 80px;
-        }
-        
-        .header {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -1px;
-        }
-        
-        .total-protein {
-            font-size: 2em;
-            margin-top: 15px;
-            color: #00d4ff;
-            font-weight: 700;
-            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
-        }
-        
-        .log-container {
-            max-width: 800px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-        
-        .log-item {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 15px;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .log-item:hover {
-            background: rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-        }
-        
-        .log-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 8px;
-            flex-wrap: wrap;
-        }
-        
-        .log-item-name {
-            font-size: 1.3em;
-            font-weight: 600;
-            flex: 1;
-            min-width: 200px;
-        }
-        
-        .log-item-amount {
-            font-size: 1.1em;
-            color: #ffd93d;
-            font-weight: 600;
-            margin-right: 15px;
-        }
-        
-        .log-item-cal {
-            font-size: 1.2em;
-            color: #4ecdc4;
-            font-weight: 700;
-        }
-        
-        .log-item-time {
-            font-size: 0.9em;
-            color: rgba(255, 255, 255, 0.6);
-            margin-top: 5px;
-        }
-        
-        .no-entries {
-            text-align: center;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 1.2em;
-            margin: 50px 0;
-        }
-        
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(20px);
-            padding: 15px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .bottom-nav-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
-            border: none;
-            border-radius: 15px;
-            color: white;
-            font-size: 1.2em;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .bottom-nav-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-        }
-        
-        @media (max-width: 768px) {
-            .log-item-header {
-                flex-direction: column;
-                align-items: stretch;
-            }
+        // Simplified polling for today page - just refresh on updates
+        function simplePoll() {
+            if (isPolling) return;
+            isPolling = true;
             
-            .log-item-amount {
-                margin-right: 0;
-                margin-bottom: 5px;
-            }
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    isPolling = false;
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.updated && data.timestamp > lastUpdate) {
+                                lastUpdate = data.timestamp;
+                                localStorage.setItem('lastUpdate', lastUpdate.toString());
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                                return;
+                            }
+                        } catch (e) {}
+                    }
+                    setTimeout(simplePoll, 30000);
+                }
+            };
+            xhr.send();
         }
-    </style>
+        
+        window.onload = function() {
+            simplePoll();
+        };
+    </script>
 </head>
 <body>
     <div class="header">
@@ -769,70 +340,6 @@ HTML_TODAY = """
             Back to Food Pads
         </button>
     </div>
-    
-    <script>
-        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
-        var isPolling = false;
-        var debugMode = {{ 'true' if js_debug else 'false' }};
-        
-        function debug(msg) {
-            if (debugMode) {
-                console.log('[DEBUG TODAY] ' + msg);
-                var debugEl = document.getElementById('debug') || document.createElement('div');
-                if (!debugEl.id) {
-                    debugEl.id = 'debug';
-                    debugEl.style.cssText = 'position:fixed;top:0;right:0;background:blue;color:white;padding:5px;font-size:12px;z-index:9999;max-width:200px;';
-                    document.body.appendChild(debugEl);
-                }
-                debugEl.innerHTML = new Date().toTimeString().substr(0,8) + ': ' + msg;
-            }
-        }
-        
-        function poll() {
-            if (isPolling) {
-                debug('Poll already running, skipping');
-                return;
-            }
-            
-            isPolling = true;
-            debug('Starting poll, lastUpdate: ' + lastUpdate);
-            
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    isPolling = false;
-                    
-                    if (xhr.status === 200) {
-                        try {
-                            var data = JSON.parse(xhr.responseText);
-                            debug('Poll response: updated=' + data.updated);
-                            
-                            if (data.updated && data.timestamp > lastUpdate) {
-                                lastUpdate = data.timestamp;
-                                localStorage.setItem('lastUpdate', lastUpdate.toString());
-                                
-                                debug('Refreshing - showing new logged items');
-                                setTimeout(function() {
-                                    window.location.reload();
-                                }, 1000);
-                                return;
-                            }
-                        } catch (e) {
-                            debug('JSON parse error: ' + e.message);
-                        }
-                    }
-                    
-                    setTimeout(poll, 30000);
-                }
-            };
-            xhr.send();
-        }
-        
-        window.onload = function() {
-            poll();
-        };
-    </script>
 </body>
 </html>
 """
@@ -843,103 +350,45 @@ HTML_NUTRITION = """
 <head>
     <title>Nutrition Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    <link rel="stylesheet" href="/static/base.css">
+    
+    <script src="/static/polling.js"></script>
+    <script>
+        setDebugMode({{ 'true' if js_debug else 'false' }});
         
-        body { 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #fff; 
-            font-family: 'SF Pro Display', -webkit-system-font, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            padding-bottom: 80px;
+        // Simplified polling for nutrition page
+        function simplePoll() {
+            if (isPolling) return;
+            isPolling = true;
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    isPolling = false;
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.updated && data.timestamp > lastUpdate) {
+                                lastUpdate = data.timestamp;
+                                localStorage.setItem('lastUpdate', lastUpdate.toString());
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                                return;
+                            }
+                        } catch (e) {}
+                    }
+                    setTimeout(simplePoll, 30000);
+                }
+            };
+            xhr.send();
         }
         
-        .header {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            background: linear-gradient(45deg, #00d4ff, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -1px;
-        }
-        
-        .nutrition-stats {
-            max-width: 800px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-        
-        .stat-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 15px;
-            padding: 25px;
-            text-align: center;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .stat-value {
-            font-size: 2.2em;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-        
-        .stat-value.calories { color: #ff6b6b; }
-        .stat-value.protein { color: #4ecdc4; }
-        .stat-value.ratio { color: #00d4ff; }
-        
-        .stat-label {
-            font-size: 1em;
-            color: rgba(255, 255, 255, 0.7);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(20px);
-            padding: 15px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .bottom-nav-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
-            border: none;
-            border-radius: 15px;
-            color: white;
-            font-size: 1.2em;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .bottom-nav-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-        }
-    </style>
+        window.onload = function() {
+            simplePoll();
+        };
+    </script>
 </head>
 <body>
     <div class="header">
@@ -968,44 +417,6 @@ HTML_NUTRITION = """
             Back to Food Pads
         </button>
     </div>
-    
-    <script>
-        var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
-        var isPolling = false;
-        var debugMode = {{ 'true' if js_debug else 'false' }};
-        
-        function poll() {
-            if (isPolling) return;
-            isPolling = true;
-            
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    isPolling = false;
-                    if (xhr.status === 200) {
-                        try {
-                            var data = JSON.parse(xhr.responseText);
-                            if (data.updated && data.timestamp > lastUpdate) {
-                                lastUpdate = data.timestamp;
-                                localStorage.setItem('lastUpdate', lastUpdate.toString());
-                                setTimeout(function() {
-                                    window.location.reload();
-                                }, 1000);
-                                return;
-                            }
-                        } catch (e) {}
-                    }
-                    setTimeout(poll, 30000);
-                }
-            };
-            xhr.send();
-        }
-        
-        window.onload = function() {
-            poll();
-        };
-    </script>
 </body>
 </html>
 """
@@ -1106,8 +517,9 @@ def log_food():
     
     return jsonify({'status': 'success'})
 
-# Register polling routes
+# Register polling and styles routes
 register_polling_routes(app)
+register_styles_routes(app)
 
 # --- MAIN ---
 def main():
