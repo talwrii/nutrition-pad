@@ -2,7 +2,6 @@
 Food entry database operations and nutrition calculations.
 Handles daily logs, configuration loading, and nutrition statistics.
 """
-
 import json
 import os
 import toml
@@ -106,12 +105,39 @@ protein = 0
 name = "Set Amount"
 """
 
+def parse_scale(scale_str):
+    """Parse scale expressions like '3/4', '2*3', '1/2/3' into float"""
+    if not scale_str or scale_str == "1" or scale_str == 1:
+        return 1.0
+    
+    # If it's already a number, convert directly
+    if isinstance(scale_str, (int, float)):
+        return float(scale_str)
+    
+    try:
+        # Convert to string if needed and strip whitespace
+        scale_str = str(scale_str).strip()
+        
+        # For safety, only allow numbers, operators, parentheses, and decimals
+        allowed_chars = set('0123456789./*+-()')
+        if not all(c in allowed_chars or c.isspace() for c in scale_str):
+            raise ValueError("Invalid characters in scale expression")
+        
+        # Use eval with restricted globals for safety
+        result = eval(scale_str, {"__builtins__": {}}, {})
+        
+        if not isinstance(result, (int, float)) or result <= 0:
+            raise ValueError("Scale must be a positive number")
+            
+        return float(result)
+    except Exception as e:
+        print(f"Error parsing scale '{scale_str}': {e}")
+        return 1.0  # Default to no scaling on error
 
 def ensure_logs_directory():
     """Create logs directory if it doesn't exist"""
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR)
-
 
 def load_config():
     """Load TOML config file, create default if not exists"""
@@ -122,12 +148,10 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         return toml.load(f)
 
-
 def get_today_log_file():
     """Get path to today's log file"""
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOGS_DIR, f'{today}.json')
-
 
 def load_today_log():
     """Load today's food log"""
@@ -138,25 +162,35 @@ def load_today_log():
     with open(log_file, 'r') as f:
         return json.load(f)
 
-
 def save_food_entry(pad_key, food_key, food_data, amount=None):
-    """Save a food entry to today's log with specified amount or unit"""
+    """Save a food entry to today's log with specified amount or unit, applying scale if present"""
     log_file = get_today_log_file()
     log = load_today_log()
     
+    # Parse scale factor from food data
+    scale = parse_scale(food_data.get('scale', 1.0))
+    
     if food_data.get('type') == 'unit':
-        # Unit food - use fixed calories/protein
-        calories = food_data['calories']
-        protein = food_data.get('protein', 0)
-        amount = 1  # Store as 1 unit
-        amount_display = "1 unit"
+        # Unit food - apply scale to fixed calories/protein
+        base_calories = food_data['calories']
+        base_protein = food_data.get('protein', 0)
+        calories = base_calories * scale
+        protein = base_protein * scale
+        amount = scale  # Store the scale factor as amount for units
+        if scale == 1.0:
+            amount_display = "1 unit"
+        else:
+            amount_display = f"{scale} units"
     else:
-        # Amount food - calculate based on grams
+        # Amount food - apply scale to the amount, then calculate nutrition
         if amount is None:
             amount = 100  # Default fallback
-        calories = food_data['calories_per_gram'] * amount
-        protein = food_data.get('protein_per_gram', 0) * amount
-        amount_display = f"{amount}g"
+        
+        effective_amount = amount * scale
+        calories = food_data['calories_per_gram'] * effective_amount
+        protein = food_data.get('protein_per_gram', 0) * effective_amount
+        amount_display = f"{effective_amount}g"
+        amount = effective_amount  # Store the effective amount
     
     entry = {
         'time': datetime.now().strftime('%H:%M'),
@@ -167,6 +201,7 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
         'amount_display': amount_display,
         'calories': round(calories, 1),
         'protein': round(protein, 1),
+        'scale': scale if scale != 1.0 else None,  # Only store scale if not 1.0
         'timestamp': datetime.now().isoformat()
     }
     
@@ -175,18 +210,15 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     with open(log_file, 'w') as f:
         json.dump(log, f, indent=2)
 
-
 def calculate_daily_total():
     """Calculate total protein for today"""
     log = load_today_log()
     return round(sum(entry.get('protein', 0) for entry in log), 1)
 
-
 def calculate_daily_item_count():
     """Calculate total items logged for today"""
     log = load_today_log()
     return len(log)
-
 
 def calculate_nutrition_stats():
     """Calculate comprehensive nutrition stats for today"""
@@ -210,7 +242,6 @@ def calculate_nutrition_stats():
         'avg_ratio': f"{avg_ratio:.2f}"
     }
 
-
 def validate_food_request(pad_key, food_key):
     """Validate that a pad and food key exist in the config"""
     config = load_config()
@@ -223,12 +254,10 @@ def validate_food_request(pad_key, food_key):
     
     return True, config['pads'][pad_key]['foods'][food_key]
 
-
 def get_food_data(pad_key, food_key):
     """Get food data for a specific pad and food key"""
     config = load_config()
     return config['pads'][pad_key]['foods'][food_key]
-
 
 def get_all_pads():
     """Get all pads from the configuration"""
