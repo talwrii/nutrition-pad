@@ -80,18 +80,50 @@ function updateAmountDisplay(amount) {
 
 function createPresetButtons() {
     var presetGrid = document.querySelector('.preset-grid');
-    if (!presetGrid) return;
+    if (!presetGrid) {
+        debug('Warning: .preset-grid element not found');
+        return;
+    }
     
     var presets = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500];
     presetGrid.innerHTML = '';
+    
+    debug('Creating ' + presets.length + ' preset buttons');
     
     presets.forEach(function(amount) {
         var btn = document.createElement('button');
         btn.className = 'preset-btn';
         btn.textContent = amount + 'g';
-        btn.onclick = function() { setCurrentAmount(amount); };
+        btn.onclick = function() { 
+            debug('Preset button clicked: ' + amount + 'g');
+            setCurrentAmount(amount); 
+        };
         presetGrid.appendChild(btn);
     });
+    
+    debug('Preset buttons created successfully');
+}
+
+// Also call createPresetButtons when the amounts tab content is loaded
+function initializeAmountsTab() {
+    debug('Initializing amounts tab');
+    
+    // Update display
+    if (typeof updateAmountDisplay === 'function') {
+        updateAmountDisplay(getCurrentAmount());
+    }
+    
+    // Create preset buttons with retry logic
+    setTimeout(function() {
+        createPresetButtons();
+        
+        // If no buttons were created, try again after a short delay
+        var buttons = document.querySelectorAll('.preset-btn');
+        if (buttons.length === 0) {
+            debug('No preset buttons found, retrying...');
+            setTimeout(createPresetButtons, 500);
+        }
+    }, 100);
 }
 
 function onAmountSliderChange(value) {

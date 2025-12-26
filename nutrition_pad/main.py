@@ -223,11 +223,16 @@ HTML_INDEX = """
         
         // Initialize when page loads
         window.onload = function() {
-            if (typeof updateAmountDisplay === 'function') {
-                updateAmountDisplay(getCurrentAmount());
-            }
-            if (typeof createPresetButtons === 'function') {
-                createPresetButtons();
+            if (typeof initializeAmountsTab === 'function') {
+                initializeAmountsTab();
+            } else {
+                // Fallback to old method
+                if (typeof updateAmountDisplay === 'function') {
+                    updateAmountDisplay(getCurrentAmount());
+                }
+                if (typeof createPresetButtons === 'function') {
+                    createPresetButtons();
+                }
             }
             startLongPolling();
         };
