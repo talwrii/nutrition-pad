@@ -24,6 +24,7 @@ app.secret_key = os.urandom(24)
 ensure_logs_directory()
 
 # --- HTML TEMPLATES ---
+
 HTML_INDEX = """
 <!DOCTYPE html>
 <html>
@@ -44,7 +45,6 @@ HTML_INDEX = """
             z-index: 10;
             cursor: pointer;
         }
-
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
@@ -313,7 +313,6 @@ HTML_TODAY = """
             z-index: 10;
             cursor: pointer;
         }
-
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
@@ -421,7 +420,6 @@ HTML_NUTRITION = """
             z-index: 10;
             cursor: pointer;
         }
-
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
@@ -628,13 +626,13 @@ HTML_FOOD_EDITOR = """
         
         .help-text {
             margin-bottom: 20px;
-            padding: 15px;
+            padding: 20px;
             background: rgba(255, 217, 61, 0.1);
             border: 1px solid rgba(255, 217, 61, 0.3);
             border-radius: 10px;
-            color: rgba(255, 255, 255, 0.8);
+            color: rgba(255, 255, 255, 0.9);
             font-size: 0.95em;
-            line-height: 1.4;
+            line-height: 1.6;
         }
         
         @media (max-width: 768px) {
@@ -670,9 +668,37 @@ HTML_FOOD_EDITOR = """
         
         <div class="editor-form">
             <div class="help-text">
+                <strong>📖 TOML Format Documentation:</strong><br><br>
+                
+                <strong>Basic Structure:</strong><br>
+                <code>[pads.pad_name]</code> - Define a new food pad<br>
+                <code>name = "Display Name"</code> - Human-readable pad name<br><br>
+                
+                <strong>Food Definitions:</strong><br>
+                <code>[pads.pad_name.foods.food_key]</code> - Define a food item<br>
+                <code>name = "Food Name"</code> - Display name for the food<br>
+                <code>type = "amount" | "unit"</code> - Food measurement type<br><br>
+                
+                <strong>Amount Foods (measured in grams):</strong><br>
+                <code>calories_per_gram = 1.46</code> - Calories per gram<br>
+                <code>protein_per_gram = 0.27</code> - Protein grams per gram of food<br>
+                <code>scale = 1.0</code> - Optional scaling factor<br><br>
+                
+                <strong>Unit Foods (fixed serving sizes):</strong><br>
+                <code>calories = 140</code> - Total calories per serving<br>
+                <code>protein = 12</code> - Total protein grams per serving<br>
+                <code>scale = 1.0</code> - Optional scaling factor<br><br>
+                
+                <strong>Example Entry:</strong><br>
+                <code>[pads.proteins.foods.chicken_breast]</code><br>
+                <code>name = "Chicken Breast"</code><br>
+                <code>type = "amount"</code><br>
+                <code>calories_per_gram = 1.46</code><br>
+                <code>protein_per_gram = 0.27</code><br><br>
+                
                 <strong>💡 Tips:</strong><br>
-                • Use <code>type = "amount"</code> for foods measured in grams<br>
-                • Use <code>type = "unit"</code> for fixed serving sizes<br>
+                • Always include the "amounts" pad for the amount selector<br>
+                • Use descriptive food keys (no spaces, use underscores)<br>
                 • Make sure to save your changes before leaving this page<br>
                 • Invalid TOML format will prevent saving
             </div>
@@ -755,6 +781,7 @@ HTML_FOOD_EDITOR = """
 """
 
 # --- ROUTES ---
+
 @app.route('/')
 def index():
     pads = get_all_pads()
@@ -782,7 +809,6 @@ def index():
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
     current_amount = get_current_amount()
-
     
     # Handle amounts tab content
     amounts_content = ""
@@ -912,6 +938,7 @@ register_polling_routes(app)
 register_styles_routes(app)
 
 # --- MAIN ---
+
 def main():
     parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')
