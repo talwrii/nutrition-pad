@@ -7,118 +7,20 @@ import toml
 import time
 import threading
 
+# Import our modules
+from .polling import register_polling_routes, get_current_amount, mark_updated
+from .amounts import render_amounts_tab, get_amounts_javascript
+from .data import (
+    ensure_logs_directory, load_config, load_today_log, save_food_entry,
+    calculate_daily_total, calculate_daily_item_count, calculate_nutrition_stats,
+    validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR
+)
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Long polling update tracking
-last_update = time.time()
-update_lock = threading.Lock()
-update_event = threading.Event()
-current_nonce = None  # Store the nonce from the last update
-current_amount = 100  # Server-side amount state
-amount_update = time.time()  # Track when amount was last updated
-
-CONFIG_FILE = 'foods.toml'
-LOGS_DIR = 'daily_logs'
-
-# Create logs directory if it doesn't exist
-if not os.path.exists(LOGS_DIR):
-    os.makedirs(LOGS_DIR)
-
-# --- DEFAULT CONFIG (unit vs amount foods) ---
-DEFAULT_CONFIG = """[pads.proteins]
-name = "Proteins"
-
-[pads.proteins.foods.chicken_breast]
-name = "Chicken Breast"
-type = "amount"  # needs amount in grams
-calories_per_gram = 1.46
-protein_per_gram = 0.27
-
-[pads.proteins.foods.ground_beef]
-name = "Ground Beef"
-type = "amount"
-calories_per_gram = 2.50
-protein_per_gram = 0.20
-
-[pads.proteins.foods.salmon]
-name = "Salmon"
-type = "amount"
-calories_per_gram = 1.77
-protein_per_gram = 0.25
-
-[pads.proteins.foods.eggs]
-name = "Eggs (2 large)"
-type = "unit"  # fixed serving
-calories = 140
-protein = 12
-
-[pads.vegetables]
-name = "Vegetables"
-
-[pads.vegetables.foods.broccoli]
-name = "Broccoli"
-type = "amount"
-calories_per_gram = 0.34
-protein_per_gram = 0.03
-
-[pads.vegetables.foods.spinach]
-name = "Spinach"
-type = "amount"
-calories_per_gram = 0.23
-protein_per_gram = 0.03
-
-[pads.vegetables.foods.carrots]
-name = "Carrots"
-type = "amount"
-calories_per_gram = 0.41
-protein_per_gram = 0.01
-
-[pads.carbs]
-name = "Carbs"
-
-[pads.carbs.foods.rice]
-name = "Rice (cooked)"
-type = "amount"
-calories_per_gram = 1.30
-protein_per_gram = 0.03
-
-[pads.carbs.foods.bread]
-name = "Bread (1 slice)"
-type = "unit"
-calories = 80
-protein = 3
-
-[pads.carbs.foods.pasta]
-name = "Pasta (cooked)"
-type = "amount"
-calories_per_gram = 1.31
-protein_per_gram = 0.05
-
-[pads.quick]
-name = "Quick Add"
-
-[pads.quick.foods.coffee]
-name = "Black Coffee"
-type = "unit"
-calories = 5
-protein = 0
-
-[pads.quick.foods.water]
-name = "Water"
-type = "unit"
-calories = 0
-protein = 0
-
-[pads.quick.foods.tea]
-name = "Tea"
-type = "unit"
-calories = 2
-protein = 0
-
-[pads.amounts]
-name = "Set Amount"
-"""
+# Initialize data directory
+ensure_logs_directory()
 
 # --- HTML TEMPLATES ---
 HTML_INDEX = """
@@ -515,72 +417,8 @@ HTML_INDEX = """
             return Date.now().toString() + Math.random().toString(36).substr(2);
         }
         
-        function getCurrentAmount() {
-            // Amount is now synced with server, get from page data initially
-            var displayEl = document.querySelector('.current-amount, .amount-display');
-            if (displayEl) {
-                var match = displayEl.textContent.match(/(\d+)g/);
-                if (match) return parseFloat(match[1]);
-            }
-            return 100;
-        }
-        
-        function setCurrentAmount(amount) {
-            // Send amount to server
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/set-amount', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    debug('Amount set successfully to: ' + amount);
-                    updateAmountDisplay(amount);
-                    // Update our local timestamp so we don't get our own update back
-                    lastAmountUpdate = new Date().getTime() / 1000;
-                    localStorage.setItem('lastAmountUpdate', lastAmountUpdate.toString());
-                } else if (xhr.readyState === 4) {
-                    debug('Error setting amount: ' + xhr.status);
-                }
-            };
-            xhr.send(JSON.stringify({amount: amount}));
-        }
-        
-        function updateAmountDisplay(amount) {
-            var amountEls = document.querySelectorAll('.current-amount, .amount-display');
-            amountEls.forEach(function(el) {
-                el.textContent = amount + 'g';
-            });
-            
-            // Update amount indicators on food buttons
-            var amountIndicators = document.querySelectorAll('.food-type-indicator.amount');
-            amountIndicators.forEach(function(el) {
-                el.textContent = amount + 'g';
-            });
-            
-            var sliderEl = document.getElementById('amountSlider');
-            if (sliderEl) {
-                sliderEl.value = amount;
-            }
-        }
-        
-        function createPresetButtons() {
-            var presetGrid = document.querySelector('.preset-grid');
-            if (!presetGrid) return;
-            
-            var presets = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500];
-            presetGrid.innerHTML = '';
-            
-            presets.forEach(function(amount) {
-                var btn = document.createElement('button');
-                btn.className = 'preset-btn';
-                btn.textContent = amount + 'g';
-                btn.onclick = function() { setCurrentAmount(amount); };
-                presetGrid.appendChild(btn);
-            });
-        }
-        
-        function onAmountSliderChange(value) {
-            setCurrentAmount(parseFloat(value));
-        }
+        // Amounts functionality from amounts module
+        {{ amounts_javascript|safe }}
         
         function logFood(padKey, foodKey) {
             myNonce = generateNonce();
@@ -716,25 +554,7 @@ HTML_INDEX = """
     </div>
     
     {% if current_pad == 'amounts' %}
-    <div class="amounts-container">
-        <div class="amount-display">{{ current_amount }}g</div>
-        
-        <div class="slider-container">
-            <input type="range" min="0" max="500" value="{{ current_amount }}" 
-                   class="slider" id="amountSlider" 
-                   onchange="setCurrentAmount(this.value)">
-            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.5); font-size: 0.9em; margin-top: 10px;">
-                <span>0g</span>
-                <span>250g</span>
-                <span>500g</span>
-            </div>
-        </div>
-        
-        <div class="preset-amounts">
-            <h3>Quick Amounts</h3>
-            <div class="preset-grid"></div>
-        </div>
-    </div>
+    {{ amounts_content|safe }}
     {% else %}
     <div id="food-grid" class="food-grid">
         {% if current_pad_data and current_pad_data.foods %}
@@ -1190,195 +1010,10 @@ HTML_NUTRITION = """
 </html>
 """
 
-# --- HELPER FUNCTIONS ---
-def load_config():
-    """Load TOML config file, create default if not exists"""
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'w') as f:
-            f.write(DEFAULT_CONFIG)
-    
-    with open(CONFIG_FILE, 'r') as f:
-        return toml.load(f)
-
-def get_today_log_file():
-    """Get path to today's log file"""
-    today = date.today().strftime('%Y-%m-%d')
-    return os.path.join(LOGS_DIR, f'{today}.json')
-
-def load_today_log():
-    """Load today's food log"""
-    log_file = get_today_log_file()
-    if not os.path.exists(log_file):
-        return []
-    
-    with open(log_file, 'r') as f:
-        return json.load(f)
-
-def save_food_entry(pad_key, food_key, food_data, amount=None):
-    """Save a food entry to today's log with specified amount or unit"""
-    log_file = get_today_log_file()
-    log = load_today_log()
-    
-    if food_data.get('type') == 'unit':
-        # Unit food - use fixed calories/protein
-        calories = food_data['calories']
-        protein = food_data.get('protein', 0)
-        amount = 1  # Store as 1 unit
-        amount_display = "1 unit"
-    else:
-        # Amount food - calculate based on grams
-        if amount is None:
-            amount = 100  # Default fallback
-        calories = food_data['calories_per_gram'] * amount
-        protein = food_data.get('protein_per_gram', 0) * amount
-        amount_display = f"{amount}g"
-    
-    entry = {
-        'time': datetime.now().strftime('%H:%M'),
-        'pad': pad_key,
-        'food': food_key,
-        'name': food_data['name'],
-        'amount': amount,
-        'amount_display': amount_display,
-        'calories': round(calories, 1),
-        'protein': round(protein, 1),
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    log.append(entry)
-    
-    with open(log_file, 'w') as f:
-        json.dump(log, f, indent=2)
-
-def calculate_daily_total():
-    """Calculate total protein for today"""
-    log = load_today_log()
-    return round(sum(entry.get('protein', 0) for entry in log), 1)
-
-def calculate_daily_item_count():
-    """Calculate total items logged for today"""
-    log = load_today_log()
-    return len(log)
-
-def calculate_nutrition_stats():
-    """Calculate comprehensive nutrition stats for today"""
-    log = load_today_log()
-    
-    if not log:
-        return {
-            'total_calories': 0,
-            'total_protein': 0,
-            'avg_ratio': '0.00'
-        }
-    
-    total_calories = sum(entry.get('calories', 0) for entry in log)
-    total_protein = sum(entry.get('protein', 0) for entry in log)
-    
-    avg_ratio = total_protein / total_calories if total_calories > 0 else 0
-    
-    return {
-        'total_calories': round(total_calories),
-        'total_protein': round(total_protein, 1),
-        'avg_ratio': f"{avg_ratio:.2f}"
-    }
-
-def mark_updated(nonce=None):
-    """Mark that data has been updated for long polling"""
-    global last_update, current_nonce
-    with update_lock:
-        last_update = time.time()
-        current_nonce = nonce
-    update_event.set()
-    threading.Timer(0.1, update_event.clear).start()
-
-def mark_amount_updated():
-    """Mark that amount has been updated"""
-    global amount_update
-    with update_lock:
-        amount_update = time.time()
-    # Use the same event mechanism to wake up long polling requests
-    update_event.set()
-    threading.Timer(0.1, update_event.clear).start()
-
 # --- ROUTES ---
-@app.route('/poll-updates')
-def poll_updates():
-    """Long polling endpoint using threading events"""
-    since = float(request.args.get('since', 0))
-    amount_since = float(request.args.get('amount_since', 0))
-    timeout = 30
-    
-    print(f"[DEBUG] Poll request: since={since}, amount_since={amount_since}, current_amount={current_amount}, amount_update={amount_update}")
-    
-    with update_lock:
-        if last_update > since or amount_update > amount_since:
-            response = {
-                'updated': last_update > since,
-                'timestamp': last_update,
-                'item_count': calculate_daily_item_count(),
-                'total_protein': calculate_daily_total(),
-                'nonce': current_nonce,
-                'amount_changed': amount_update > amount_since,
-                'current_amount': current_amount
-            }
-            print(f"[DEBUG] Immediate response: {response}")
-            return jsonify(response)
-    
-    event_occurred = update_event.wait(timeout)
-    
-    if event_occurred:
-        with update_lock:
-            if last_update > since or amount_update > amount_since:
-                response = {
-                    'updated': last_update > since,
-                    'timestamp': last_update,
-                    'item_count': calculate_daily_item_count(),
-                    'total_protein': calculate_daily_total(),
-                    'nonce': current_nonce,
-                    'amount_changed': amount_update > amount_since,
-                    'current_amount': current_amount
-                }
-                print(f"[DEBUG] Event response: {response}")
-                return jsonify(response)
-    
-    return jsonify({
-        'updated': False,
-        'amount_changed': False,
-        'current_amount': current_amount
-    })
-
-@app.route('/set-amount', methods=['POST'])
-def set_amount():
-    """Set the current amount"""
-    global current_amount
-    
-    data = request.json
-    if not data or 'amount' not in data:
-        return jsonify({'error': 'No amount provided'}), 400
-    
-    try:
-        new_amount = float(data['amount'])
-        if new_amount < 0 or new_amount > 500:
-            return jsonify({'error': 'Amount must be between 0 and 500'}), 400
-        
-        old_amount = current_amount
-        with update_lock:
-            current_amount = new_amount
-        
-        print(f"[DEBUG] Amount changed from {old_amount} to {current_amount}")
-        mark_amount_updated()
-        print(f"[DEBUG] Amount update marked, new timestamp: {amount_update}")
-        
-        return jsonify({'status': 'success', 'amount': current_amount})
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid amount'}), 400
-
 @app.route('/')
 def index():
-    global current_amount
-    
-    config = load_config()
-    pads = config.get('pads', {})
+    pads = get_all_pads()
     
     # Get current pad from URL parameter  
     current_pad = request.args.get('pad', None)
@@ -1398,6 +1033,14 @@ def index():
     
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
+    current_amount = get_current_amount()
+    
+    # Handle amounts tab content
+    amounts_content = ""
+    amounts_javascript = ""
+    if current_pad == 'amounts':
+        amounts_content = render_amounts_tab(current_amount)
+        amounts_javascript = get_amounts_javascript()
     
     return render_template_string(HTML_INDEX,
                                 pads=pads,
@@ -1406,6 +1049,8 @@ def index():
                                 daily_total=daily_total,
                                 item_count=item_count,
                                 current_amount=current_amount,
+                                amounts_content=amounts_content,
+                                amounts_javascript=amounts_javascript,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/today')
@@ -1432,8 +1077,6 @@ def nutrition_dashboard():
 
 @app.route('/log', methods=['POST'])
 def log_food():
-    global current_amount
-    
     data = request.json
     if not data:
         return jsonify({'error': 'No data'}), 400
@@ -1445,25 +1088,26 @@ def log_food():
     if not pad_key or not food_key:
         return jsonify({'error': 'Missing pad or food key'}), 400
     
-    config = load_config()
+    # Validate request using data module
+    valid, result = validate_food_request(pad_key, food_key)
+    if not valid:
+        return jsonify({'error': result}), 400
     
-    if pad_key not in config.get('pads', {}):
-        return jsonify({'error': 'Invalid pad'}), 400
-        
-    if food_key not in config['pads'][pad_key].get('foods', {}):
-        return jsonify({'error': 'Invalid food'}), 400
-    
-    food_data = config['pads'][pad_key]['foods'][food_key]
+    food_data = result
     
     # Pass amount for amount-based foods, None for unit foods
     if food_data.get('type') == 'unit':
         save_food_entry(pad_key, food_key, food_data, None)
     else:
+        current_amount = get_current_amount()
         save_food_entry(pad_key, food_key, food_data, current_amount)
     
     mark_updated(nonce)
     
     return jsonify({'status': 'success'})
+
+# Register polling routes
+register_polling_routes(app)
 
 # --- MAIN ---
 def main():
