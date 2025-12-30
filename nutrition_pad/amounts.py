@@ -5,8 +5,93 @@ Works perfectly on old tablets like Galaxy Note 10.1.
 """
 from flask import render_template_string
 
-# HTML template with custom slider built from divs
+# HTML template with custom slider built from divs - INCLUDES ITS OWN CSS
 AMOUNTS_TAB_HTML = """
+<style>
+/* Custom slider styles - self-contained in amounts.py */
+.custom-slider {
+    padding: 30px 15px;
+}
+
+.slider-track {
+    position: relative;
+    width: 100%;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 20px 0;
+}
+
+.slider-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #ffd93d, #ff6b6b);
+    border-radius: 6px;
+    width: 22%;
+    pointer-events: none;
+    transition: width 0.1s ease;
+}
+
+.slider-thumb {
+    position: absolute;
+    top: 50%;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+    border: 3px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    left: 22%;
+    margin-top: -16px;
+    margin-left: -16px;
+    box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    z-index: 10;
+}
+
+.slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(255, 217, 61, 0.5);
+}
+
+.slider-thumb:active {
+    transform: scale(0.95);
+    box-shadow: 0 8px 25px rgba(255, 217, 61, 0.6);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9em;
+    margin-top: 15px;
+    margin-bottom: 10px;
+}
+
+/* Mobile optimizations for slider */
+@media (max-width: 768px) {
+    .slider-track {
+        height: 16px;
+        margin: 30px 0;
+    }
+    
+    .slider-thumb {
+        width: 40px;
+        height: 40px;
+        margin-top: -20px;
+        margin-left: -20px;
+        border: 4px solid white;
+    }
+    
+    .custom-slider {
+        padding: 40px 15px;
+    }
+}
+</style>
+
 <div class="amounts-container">
     <div class="amount-display">{{ current_amount }}g</div>
     
@@ -247,8 +332,9 @@ function onAmountSliderChange(value) {
 }
 """
 
-# CSS styles for custom slider
+# CSS styles for custom slider - COMPLETE CSS INCLUDING SLIDER STYLES
 AMOUNTS_CSS = """
+/* Container and display styles */
 .amounts-container {
     max-width: 600px;
     margin: 0 auto;
@@ -272,7 +358,7 @@ AMOUNTS_CSS = """
     backdrop-filter: blur(20px);
 }
 
-/* Custom slider styles */
+/* Custom slider styles - THIS IS THE IMPORTANT PART */
 .custom-slider {
     padding: 30px 15px;
 }
@@ -294,8 +380,9 @@ AMOUNTS_CSS = """
     height: 100%;
     background: linear-gradient(90deg, #ffd93d, #ff6b6b);
     border-radius: 6px;
-    width: 20%;
+    width: 22%;
     pointer-events: none;
+    transition: width 0.1s ease;
 }
 
 .slider-thumb {
@@ -307,11 +394,12 @@ AMOUNTS_CSS = """
     border: 3px solid white;
     border-radius: 50%;
     cursor: pointer;
-    left: 20%;
+    left: 22%;
     margin-top: -16px;
     margin-left: -16px;
     box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
+    z-index: 10;
 }
 
 .slider-thumb:hover {
@@ -321,6 +409,7 @@ AMOUNTS_CSS = """
 
 .slider-thumb:active {
     transform: scale(0.95);
+    box-shadow: 0 8px 25px rgba(255, 217, 61, 0.6);
 }
 
 .slider-labels {
@@ -364,6 +453,7 @@ AMOUNTS_CSS = """
     transform: translateY(0);
 }
 
+/* Preset amounts section */
 .preset-amounts {
     margin: 30px 0;
 }
@@ -412,6 +502,7 @@ AMOUNTS_CSS = """
     
     .slider-track {
         height: 16px;
+        margin: 30px 0;
     }
     
     .slider-thumb {
@@ -419,6 +510,7 @@ AMOUNTS_CSS = """
         height: 40px;
         margin-top: -20px;
         margin-left: -20px;
+        border: 4px solid white;
     }
     
     .amount-btn {
@@ -429,6 +521,10 @@ AMOUNTS_CSS = """
     .preset-btn {
         padding: 18px 12px;
         font-size: 1.1em;
+    }
+    
+    .custom-slider {
+        padding: 40px 15px;
     }
 }
 """
