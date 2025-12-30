@@ -1,6 +1,7 @@
 """
 Amounts display and management functionality.
 Handles the amounts tab with slider, preset buttons, and amount setting.
+Enhanced for older tablet compatibility.
 """
 from flask import render_template_string
 
@@ -10,14 +11,32 @@ AMOUNTS_TAB_HTML = """
     <div class="amount-display">{{ current_amount }}g</div>
     
     <div class="slider-container">
+        <!-- Native HTML5 slider for modern browsers -->
         <input type="range" min="0" max="500" value="{{ current_amount }}" 
-               class="slider" id="amountSlider" 
-               onchange="setCurrentAmount(this.value)">
+               class="slider native-slider" id="amountSlider" 
+               onchange="setCurrentAmount(this.value)"
+               oninput="setCurrentAmount(this.value)">
+        
+        <!-- Fallback custom slider for older browsers -->
+        <div class="custom-slider" id="customSlider" style="display: none;">
+            <div class="custom-slider-track" id="sliderTrack">
+                <div class="custom-slider-thumb" id="sliderThumb"></div>
+            </div>
+        </div>
+        
         <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.5); font-size: 0.9em; margin-top: 10px;">
             <span>0g</span>
             <span>250g</span>
             <span>500g</span>
         </div>
+    </div>
+    
+    <!-- Plus/Minus buttons for easier adjustment on touch devices -->
+    <div class="amount-controls">
+        <button class="amount-btn" onclick="adjustAmount(-25)">-25g</button>
+        <button class="amount-btn" onclick="adjustAmount(-5)">-5g</button>
+        <button class="amount-btn" onclick="adjustAmount(5)">+5g</button>
+        <button class="amount-btn" onclick="adjustAmount(25)">+25g</button>
     </div>
     
     <div class="preset-amounts">
@@ -29,6 +48,10 @@ AMOUNTS_TAB_HTML = """
 
 # JavaScript for amounts functionality
 AMOUNTS_JAVASCRIPT = """
+// Store current amount value
+var currentAmountValue = 100;
+var isCustomSlider = false;
+
 function getCurrentAmount() {
     var displayEl = document.querySelector('.current-amount, .amount-display');
     debug('getCurrentAmount: displayEl = ' + (displayEl ? displayEl.textContent : 'null'));
@@ -39,11 +62,12 @@ function getCurrentAmount() {
         if (match) {
             var amount = parseFloat(match[1]);
             debug('getCurrentAmount: returning ' + amount);
+            currentAmountValue = amount;
             return amount;
         }
     }
-    debug('getCurrentAmount: falling back to 100');
-    return 100;
+    debug('getCurrentAmount: falling back to ' + currentAmountValue);
+    return currentAmountValue;
 }
 
 function setCurrentAmount(amount) {
@@ -66,9 +90,10 @@ function setCurrentAmount(amount) {
         amount = 100; // Force fallback
     }
     
-    // Convert to number to be safe
-    amount = parseFloat(amount);
-    debug('Parsed amount: ' + amount);
+    // Convert to number and clamp to valid range
+    amount = Math.max(0, Math.min(500, parseFloat(amount)));
+    currentAmountValue = amount;
+    debug('Clamped amount: ' + amount);
     
     // Generate nonce and set it so we don't refresh ourselves
     var nonce = generateNonce();
@@ -92,6 +117,13 @@ function setCurrentAmount(amount) {
     xhr.send(JSON.stringify({amount: amount, nonce: nonce}));
 }
 
+function adjustAmount(delta) {
+    var currentAmount = getCurrentAmount();
+    var newAmount = Math.max(0, Math.min(500, currentAmount + delta));
+    debug('Adjusting amount from ' + currentAmount + ' by ' + delta + ' to ' + newAmount);
+    setCurrentAmount(newAmount);
+}
+
 function updateAmountDisplay(amount) {
     debug('updateAmountDisplay called with: ' + amount + ' (type: ' + typeof amount + ')');
     
@@ -99,6 +131,8 @@ function updateAmountDisplay(amount) {
         debug('WARNING: updateAmountDisplay received 0! Call stack:');
         console.trace();
     }
+    
+    currentAmountValue = amount;
     
     var amountEls = document.querySelectorAll('.current-amount, .amount-display');
     debug('Found ' + amountEls.length + ' amount display elements');
@@ -114,12 +148,135 @@ function updateAmountDisplay(amount) {
         el.textContent = amount + 'g';
     });
     
+    // Update native slider if it exists and is working
     var sliderEl = document.getElementById('amountSlider');
-    if (sliderEl) {
-        debug('Updating slider from ' + sliderEl.value + ' to ' + amount);
+    if (sliderEl && !isCustomSlider) {
+        debug('Updating native slider from ' + sliderEl.value + ' to ' + amount);
         sliderEl.value = amount;
+    }
+    
+    // Update custom slider if active
+    if (isCustomSlider) {
+        updateCustomSliderPosition(amount);
+    }
+}
+
+// Custom slider implementation for older browsers
+function initCustomSlider() {
+    var customSlider = document.getElementById('customSlider');
+    var nativeSlider = document.getElementById('amountSlider');
+    var track = document.getElementById('sliderTrack');
+    var thumb = document.getElementById('sliderThumb');
+    
+    if (!customSlider || !track || !thumb) return;
+    
+    // Test if native slider works with touch
+    var needsCustomSlider = false;
+    try {
+        // Simple test - if we're on a touch device and the browser is old
+        if ('ontouchstart' in window) {
+            var userAgent = navigator.userAgent;
+            if (userAgent.indexOf('Android') > -1 && userAgent.indexOf('Chrome') === -1) {
+                // Old Android browser without Chrome
+                needsCustomSlider = true;
+            }
+        }
+    } catch (e) {
+        // If there's any error, fall back to custom slider
+        needsCustomSlider = true;
+    }
+    
+    if (needsCustomSlider) {
+        debug('Using custom slider for compatibility');
+        isCustomSlider = true;
+        nativeSlider.style.display = 'none';
+        customSlider.style.display = 'block';
+        
+        var isDragging = false;
+        var startX = 0;
+        var trackRect = null;
+        
+        function updateSliderFromPosition(clientX) {
+            if (!trackRect) trackRect = track.getBoundingClientRect();
+            
+            var x = clientX - trackRect.left;
+            var percentage = Math.max(0, Math.min(1, x / trackRect.width));
+            var amount = Math.round(percentage * 500);
+            
+            updateCustomSliderPosition(amount);
+            setCurrentAmount(amount);
+        }
+        
+        // Mouse events
+        thumb.addEventListener('mousedown', function(e) {
+            isDragging = true;
+            startX = e.clientX;
+            trackRect = track.getBoundingClientRect();
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (isDragging) {
+                updateSliderFromPosition(e.clientX);
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            isDragging = false;
+            trackRect = null;
+        });
+        
+        // Touch events for mobile
+        thumb.addEventListener('touchstart', function(e) {
+            isDragging = true;
+            startX = e.touches[0].clientX;
+            trackRect = track.getBoundingClientRect();
+            e.preventDefault();
+        });
+        
+        document.addEventListener('touchmove', function(e) {
+            if (isDragging) {
+                updateSliderFromPosition(e.touches[0].clientX);
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('touchend', function() {
+            isDragging = false;
+            trackRect = null;
+        });
+        
+        // Track click/touch
+        track.addEventListener('click', function(e) {
+            trackRect = track.getBoundingClientRect();
+            updateSliderFromPosition(e.clientX);
+        });
+        
+        track.addEventListener('touchstart', function(e) {
+            if (e.target === track) {
+                trackRect = track.getBoundingClientRect();
+                updateSliderFromPosition(e.touches[0].clientX);
+                e.preventDefault();
+            }
+        });
+        
+        // Initialize position
+        updateCustomSliderPosition(getCurrentAmount());
     } else {
-        debug('Slider element not found');
+        debug('Using native slider');
+        // Enhance native slider for better touch support
+        nativeSlider.addEventListener('input', function() {
+            setCurrentAmount(this.value);
+        });
+    }
+}
+
+function updateCustomSliderPosition(amount) {
+    var thumb = document.getElementById('sliderThumb');
+    if (thumb && isCustomSlider) {
+        var percentage = Math.max(0, Math.min(100, (amount / 500) * 100));
+        thumb.style.left = percentage + '%';
+        debug('Updated custom slider position to ' + percentage + '%');
     }
 }
 
@@ -149,17 +306,20 @@ function createPresetButtons() {
     debug('Preset buttons created successfully');
 }
 
-// Also call createPresetButtons when the amounts tab content is loaded
+// Initialize amounts tab with enhanced compatibility
 function initializeAmountsTab() {
-    debug('Initializing amounts tab');
+    debug('Initializing amounts tab with enhanced compatibility');
     
     // Update display
     if (typeof updateAmountDisplay === 'function') {
         updateAmountDisplay(getCurrentAmount());
     }
     
-    // Create preset buttons with retry logic
+    // Initialize custom slider if needed
     setTimeout(function() {
+        initCustomSlider();
+        
+        // Create preset buttons with retry logic
         createPresetButtons();
         
         // If no buttons were created, try again after a short delay
@@ -176,7 +336,7 @@ function onAmountSliderChange(value) {
 }
 """
 
-# CSS styles specific to amounts (already included in main, but here for reference)
+# CSS styles specific to amounts (enhanced for older browsers)
 AMOUNTS_CSS = """
 .amounts-container {
     max-width: 600px;
@@ -201,7 +361,8 @@ AMOUNTS_CSS = """
     backdrop-filter: blur(20px);
 }
 
-.slider {
+/* Native slider styles */
+.slider.native-slider {
     width: 100%;
     height: 8px;
     border-radius: 4px;
@@ -211,7 +372,7 @@ AMOUNTS_CSS = """
     margin: 20px 0;
 }
 
-.slider::-webkit-slider-thumb {
+.slider.native-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 30px;
@@ -222,7 +383,7 @@ AMOUNTS_CSS = """
     box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
 }
 
-.slider::-moz-range-thumb {
+.slider.native-slider::-moz-range-thumb {
     width: 30px;
     height: 30px;
     border-radius: 50%;
@@ -230,6 +391,71 @@ AMOUNTS_CSS = """
     cursor: pointer;
     border: none;
     box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
+}
+
+/* Custom slider for older browsers */
+.custom-slider {
+    padding: 20px 0;
+}
+
+.custom-slider-track {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.custom-slider-thumb {
+    position: absolute;
+    top: 50%;
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
+    transition: box-shadow 0.2s ease;
+}
+
+.custom-slider-thumb:hover {
+    box-shadow: 0 6px 20px rgba(255, 217, 61, 0.4);
+}
+
+/* Plus/minus controls */
+.amount-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.amount-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: white;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 60px;
+    touch-action: manipulation; /* Improve touch responsiveness */
+}
+
+.amount-btn:hover {
+    background: rgba(255, 217, 61, 0.2);
+    border-color: #ffd93d;
+    transform: translateY(-2px);
+}
+
+.amount-btn:active {
+    transform: translateY(0);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .preset-amounts {
@@ -260,12 +486,43 @@ AMOUNTS_CSS = """
     cursor: pointer;
     transition: all 0.3s ease;
     text-align: center;
+    touch-action: manipulation; /* Improve touch responsiveness */
 }
 
 .preset-btn:hover {
     background: rgba(255, 217, 61, 0.2);
     border-color: #ffd93d;
     transform: translateY(-2px);
+}
+
+.preset-btn:active {
+    transform: translateY(0);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .amount-display {
+        font-size: 2.5em;
+    }
+    
+    .amount-controls {
+        margin: 30px 0;
+    }
+    
+    .amount-btn {
+        padding: 15px 20px;
+        font-size: 1.1em;
+    }
+    
+    .custom-slider-thumb {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .preset-btn {
+        padding: 18px 12px;
+        font-size: 1.1em;
+    }
 }
 """
 

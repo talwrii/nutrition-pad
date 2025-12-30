@@ -14,6 +14,18 @@ LOGS_DIR = 'daily_logs'
 DEFAULT_CONFIG = """[pads.proteins]
 name = "Proteins"
 
+[pads.proteins.foods.unknown_amount]
+name = "Unknown (amount)"
+type = "amount"  # needs amount in grams
+calories_per_gram = 0.0  # PLACEHOLDER - look up actual values
+protein_per_gram = 0.0   # PLACEHOLDER - look up actual values
+
+[pads.proteins.foods.unknown_unit]
+name = "Unknown (unit)"
+type = "unit"  # fixed serving
+calories = 0  # PLACEHOLDER - look up actual values
+protein = 0   # PLACEHOLDER - look up actual values
+
 [pads.proteins.foods.chicken_breast]
 name = "Chicken Breast"
 type = "amount"  # needs amount in grams
@@ -262,4 +274,33 @@ def get_food_data(pad_key, food_key):
 def get_all_pads():
     """Get all pads from the configuration"""
     config = load_config()
-    return config.get('pads', {})
+    pads = config.get('pads', {})
+    
+    # Automatically inject unknown entries into the first available pad
+    if pads:
+        first_pad_key = list(pads.keys())[0]
+        
+        # Add unknown entries if they don't already exist
+        if 'unknown_amount' not in pads[first_pad_key].get('foods', {}):
+            if 'foods' not in pads[first_pad_key]:
+                pads[first_pad_key]['foods'] = {}
+            
+            pads[first_pad_key]['foods']['unknown_amount'] = {
+                'name': 'Unknown (amount)',
+                'type': 'amount',
+                'calories_per_gram': 0.0,  # PLACEHOLDER - look up actual values
+                'protein_per_gram': 0.0    # PLACEHOLDER - look up actual values
+            }
+        
+        if 'unknown_unit' not in pads[first_pad_key].get('foods', {}):
+            if 'foods' not in pads[first_pad_key]:
+                pads[first_pad_key]['foods'] = {}
+                
+            pads[first_pad_key]['foods']['unknown_unit'] = {
+                'name': 'Unknown (unit)',
+                'type': 'unit', 
+                'calories': 0,    # PLACEHOLDER - look up actual values
+                'protein': 0      # PLACEHOLDER - look up actual values
+            }
+    
+    return pads
