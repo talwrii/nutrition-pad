@@ -5,3 +5,5 @@ token
 dist
 token
 deploy
+foods.toml
+*.backup
