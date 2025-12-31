@@ -16,6 +16,7 @@ from .data import (
     validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR
 )
 from .styles import register_styles_routes
+from .notes import register_notes_routes
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -34,21 +35,30 @@ HTML_INDEX = """
     <link rel="stylesheet" href="/static/base.css">
     <style>
         /* App-specific styles that may change frequently */
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
         
         .tab-btn.amounts.active {
@@ -168,10 +178,12 @@ HTML_INDEX = """
         }
         
         @media (max-width: 768px) {
-            .settings-cog {
-                font-size: 1.3em;
+            .header-icons {
                 top: 15px;
                 right: 15px;
+            }
+            .settings-cog, .notes-link {
+                font-size: 1.3em;
             }
             
             .amount-display {
@@ -241,7 +253,10 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <div class="header-icons">
+            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        </div>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
@@ -302,15 +317,19 @@ HTML_TODAY = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
     <style>
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
@@ -318,12 +337,19 @@ HTML_TODAY = """
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
         }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
         
         @media (max-width: 768px) {
-            .settings-cog {
-                font-size: 1.3em;
+            .header-icons {
                 top: 15px;
                 right: 15px;
+            }
+            .settings-cog, .notes-link {
+                font-size: 1.3em;
             }
         }
     </style>
@@ -369,7 +395,10 @@ HTML_TODAY = """
 <body>
     <div class="header">
         <h1>Today's Log</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <div class="header-icons">
+            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
     
@@ -409,15 +438,19 @@ HTML_NUTRITION = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
     <style>
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
@@ -425,12 +458,71 @@ HTML_NUTRITION = """
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
         }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px auto;
+            max-width: 600px;
+            padding: 0 20px;
+        }
+        
+        .nav-link {
+            flex: 1;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            color: white;
+            text-decoration: none;
+            text-align: center;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            background: rgba(255, 217, 61, 0.2);
+            border-color: #ffd93d;
+            transform: translateY(-2px);
+        }
+        
+        .nav-link.notes {
+            background: rgba(255, 107, 107, 0.1);
+            border-color: rgba(255, 107, 107, 0.3);
+        }
+        
+        .nav-link.notes:hover {
+            background: rgba(255, 107, 107, 0.2);
+            border-color: #ff6b6b;
+        }
+        
+        .nav-link.resolve {
+            background: rgba(78, 205, 196, 0.1);
+            border-color: rgba(78, 205, 196, 0.3);
+        }
+        
+        .nav-link.resolve:hover {
+            background: rgba(78, 205, 196, 0.2);
+            border-color: #4ecdc4;
+        }
         
         @media (max-width: 768px) {
-            .settings-cog {
-                font-size: 1.3em;
+            .header-icons {
                 top: 15px;
                 right: 15px;
+            }
+            .settings-cog, .notes-link {
+                font-size: 1.3em;
+            }
+            
+            .nav-links {
+                flex-direction: column;
             }
         }
     </style>
@@ -476,7 +568,15 @@ HTML_NUTRITION = """
 <body>
     <div class="header">
         <h1>Nutrition Dashboard</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <div class="header-icons">
+            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        </div>
+    </div>
+    
+    <div class="nav-links">
+        <a href="/notes" class="nav-link notes">📝 Food Notes</a>
+        <a href="/resolve-unknowns" class="nav-link resolve">🔍 Resolve Unknowns</a>
     </div>
     
     <div class="nutrition-stats">
@@ -936,6 +1036,7 @@ def log_food():
 # Register polling and styles routes
 register_polling_routes(app)
 register_styles_routes(app)
+register_notes_routes(app)
 
 # --- MAIN ---
 
