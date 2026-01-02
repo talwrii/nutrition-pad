@@ -92,7 +92,7 @@ body {
 /* Grid layouts */
 .food-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, minmax(280px, 1fr));
     gap: 20px;
     padding: 30px 20px;
     max-width: 1200px;
@@ -155,19 +155,6 @@ body {
 .food-calories {
     font-size: 1.1em;
     color: #00d4ff;
-    font-weight: 600;
-}
-
-/* Indicators */
-.food-type-indicator {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(0, 0, 0, 0.6);
-    color: white;
-    font-size: 0.75em;
-    padding: 4px 8px;
-    border-radius: 8px;
     font-weight: 600;
 }
 
@@ -309,7 +296,7 @@ body {
 
 .stat-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(3, minmax(200px, 1fr));
     gap: 20px;
     margin-bottom: 30px;
 }
@@ -343,7 +330,7 @@ body {
 /* Mobile responsive breakpoints */
 @media (max-width: 768px) {
     .food-grid {
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: repeat(3, minmax(150px, 1fr));
         gap: 15px;
         padding: 20px 15px;
     }

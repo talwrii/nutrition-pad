@@ -35,30 +35,21 @@ HTML_INDEX = """
     <link rel="stylesheet" href="/static/base.css">
     <style>
         /* App-specific styles that may change frequently */
-        .header-icons {
+        .settings-cog {
             position: absolute;
             top: 20px;
             right: 20px;
-            display: flex;
-            gap: 15px;
-            z-index: 10;
-        }
-        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
+            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
-        }
-        .notes-link:hover {
-            color: #ff6b6b;
-            transform: scale(1.1);
-            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
         
         .tab-btn.amounts.active {
@@ -67,23 +58,89 @@ HTML_INDEX = """
         }
         
         .food-btn.amount-food {
-            border-color: rgba(255, 217, 61, 0.3);
-            background: rgba(255, 217, 61, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
         }
         
         .food-btn.unit-food {
-            border-color: rgba(78, 205, 196, 0.3);
-            background: rgba(78, 205, 196, 0.05);
+            border-color: rgba(255, 255, 255, 0.3);
         }
         
-        .food-type-indicator.amount {
-            background: rgba(255, 217, 61, 0.8);
-            color: #1a1a2e;
+        /* Square grid layout for food buttons */
+        .food-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(90px, 1fr));
+            gap: 10px;
+            padding: 15px;
         }
         
-        .food-type-indicator.unit {
-            background: rgba(78, 205, 196, 0.8);
-            color: #1a1a2e;
+        .food-btn {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .food-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .food-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .food-btn .food-name {
+            font-size: 0.75em;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            line-height: 1.2;
+            word-break: break-word;
+            max-height: 3.6em;
+            overflow: hidden;
+        }
+        
+        .food-btn .food-type-indicator {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            font-size: 0.5em;
+            padding: 2px 4px;
+            border-radius: 3px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            line-height: 1;
+            max-width: 40px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .food-btn .food-calories {
+            display: none;
+        }
+        
+        @media (max-width: 480px) {
+            .food-grid {
+                grid-template-columns: repeat(3, minmax(75px, 1fr));
+                gap: 8px;
+                padding: 10px;
+            }
+            .food-btn .food-name {
+                font-size: 0.7em;
+            }
+            .food-btn .food-type-indicator {
+                font-size: 0.55em;
+            }
         }
         
         /* Amounts-specific styles */
@@ -154,7 +211,7 @@ HTML_INDEX = """
         
         .preset-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            grid-template-columns: repeat(3, minmax(80px, 1fr));
             gap: 10px;
         }
         
@@ -178,12 +235,10 @@ HTML_INDEX = """
         }
         
         @media (max-width: 768px) {
-            .header-icons {
+            .settings-cog {
+                font-size: 1.3em;
                 top: 15px;
                 right: 15px;
-            }
-            .settings-cog, .notes-link {
-                font-size: 1.3em;
             }
             
             .amount-display {
@@ -194,6 +249,28 @@ HTML_INDEX = """
     
     <script src="/static/polling.js"></script>
     <script>
+        // Generate consistent color from string
+        function hashColor(str) {
+            var hash = 5381;
+            for (var i = 0; i < str.length; i++) {
+                hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+            }
+            // Use golden ratio to spread hues more evenly
+            var h = Math.abs((hash * 137.508) % 360);
+            return 'hsl(' + h + ', 75%, 45%)';
+        }
+        
+        // Apply colors to food buttons on load
+        document.addEventListener('DOMContentLoaded', function() {
+            var buttons = document.querySelectorAll('.food-btn');
+            buttons.forEach(function(btn) {
+                var name = btn.querySelector('.food-name');
+                if (name) {
+                    btn.style.background = hashColor(name.textContent.trim());
+                }
+            });
+        });
+        
         // App-specific JavaScript
         setDebugMode({{ 'true' if js_debug else 'false' }});
         
@@ -253,10 +330,7 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
-        <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
-        </div>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
@@ -278,17 +352,10 @@ HTML_INDEX = """
             {% for food_key, food in current_pad_data.foods.items() %}
             <div class="food-btn {% if food.get('type') == 'unit' %}unit-food{% else %}amount-food{% endif %}" 
                  onclick="logFood('{{ current_pad }}', '{{ food_key }}')">
-                <div class="food-type-indicator {% if food.get('type') == 'unit' %}unit{% else %}amount{% endif %}">
-                    {% if food.get('type') == 'unit' %}UNIT{% else %}{{ current_amount }}g{% endif %}
+                <div class="food-type-indicator">
+                    {% if food.get('type') == 'unit' %}U{% else %}{{ current_amount }}g{% endif %}
                 </div>
                 <div class="food-name">{{ food.name }}</div>
-                {% if food.get('type') == 'unit' %}
-                    <div class="food-calories">{{ food.get('calories', 0) }}cal • {{ food.get('protein', 0) }}g protein</div>
-                {% elif food.get('calories_per_gram') %}
-                    <div class="food-calories">{{ "%.2f"|format(food.get('protein_per_gram', 0) / food.calories_per_gram if food.calories_per_gram > 0 else 0) }} p/cal</div>
-                {% else %}
-                    <div class="food-calories">No nutrition data</div>
-                {% endif %}
             </div>
             {% endfor %}
         {% else %}
@@ -317,19 +384,15 @@ HTML_TODAY = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
     <style>
-        .header-icons {
+        .settings-cog {
             position: absolute;
             top: 20px;
             right: 20px;
-            display: flex;
-            gap: 15px;
-            z-index: 10;
-        }
-        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
+            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
@@ -337,19 +400,12 @@ HTML_TODAY = """
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
         }
-        .notes-link:hover {
-            color: #ff6b6b;
-            transform: scale(1.1);
-            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
-        }
         
         @media (max-width: 768px) {
-            .header-icons {
+            .settings-cog {
+                font-size: 1.3em;
                 top: 15px;
                 right: 15px;
-            }
-            .settings-cog, .notes-link {
-                font-size: 1.3em;
             }
         }
     </style>
@@ -395,10 +451,7 @@ HTML_TODAY = """
 <body>
     <div class="header">
         <h1>Today's Log</h1>
-        <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
-        </div>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
         <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
     
@@ -438,30 +491,21 @@ HTML_NUTRITION = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
     <style>
-        .header-icons {
+        .settings-cog {
             position: absolute;
             top: 20px;
             right: 20px;
-            display: flex;
-            gap: 15px;
-            z-index: 10;
-        }
-        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
+            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
-        }
-        .notes-link:hover {
-            color: #ff6b6b;
-            transform: scale(1.1);
-            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
         
         .nav-links {
@@ -513,12 +557,10 @@ HTML_NUTRITION = """
         }
         
         @media (max-width: 768px) {
-            .header-icons {
+            .settings-cog {
+                font-size: 1.3em;
                 top: 15px;
                 right: 15px;
-            }
-            .settings-cog, .notes-link {
-                font-size: 1.3em;
             }
             
             .nav-links {
@@ -568,10 +610,7 @@ HTML_NUTRITION = """
 <body>
     <div class="header">
         <h1>Nutrition Dashboard</h1>
-        <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
-        </div>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
     </div>
     
     <div class="nav-links">
@@ -909,6 +948,8 @@ def index():
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
     current_amount = get_current_amount()
+    # Format as int if whole number for cleaner display
+    current_amount_display = int(current_amount) if current_amount == int(current_amount) else current_amount
     
     # Handle amounts tab content
     amounts_content = ""
@@ -923,7 +964,7 @@ def index():
                                 current_pad_data=current_pad_data,
                                 daily_total=daily_total,
                                 item_count=item_count,
-                                current_amount=current_amount,
+                                current_amount=current_amount_display,
                                 amounts_content=amounts_content,
                                 amounts_javascript=amounts_javascript,
                                 js_debug=app.config.get('JS_DEBUG', False))
