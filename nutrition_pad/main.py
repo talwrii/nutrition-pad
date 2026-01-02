@@ -397,15 +397,19 @@ HTML_TODAY = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
     <style>
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
@@ -413,12 +417,41 @@ HTML_TODAY = """
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
         }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        
+        .log-item {
+            position: relative;
+            padding-right: 50px;
+        }
+        
+        .log-item-delete {
+            position: absolute;
+            top: 50%;
+            right: 15px;
+            transform: translateY(-50%);
+            color: #ff6b6b;
+            cursor: pointer;
+            font-size: 1.8em;
+            padding: 10px;
+            line-height: 1;
+            opacity: 0.7;
+        }
+        
+        .log-item-delete:hover {
+            opacity: 1;
+        }
         
         @media (max-width: 768px) {
-            .settings-cog {
-                font-size: 1.3em;
+            .header-icons {
                 top: 15px;
                 right: 15px;
+            }
+            .settings-cog, .notes-link {
+                font-size: 1.3em;
             }
         }
     </style>
@@ -426,6 +459,22 @@ HTML_TODAY = """
     <script src="/static/polling.js"></script>
     <script>
         setDebugMode({{ 'true' if js_debug else 'false' }});
+        
+        function deleteEntry(index) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/delete-entry', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        window.location.reload();
+                    } else {
+                        alert('Error deleting entry');
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({ index: index }));
+        }
         
         // Simplified polling for today page - just refresh on updates
         function simplePoll() {
@@ -464,7 +513,10 @@ HTML_TODAY = """
 <body>
     <div class="header">
         <h1>Today's Log</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <div class="header-icons">
+            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
     
@@ -472,6 +524,7 @@ HTML_TODAY = """
         {% if log_entries %}
             {% for entry in log_entries %}
             <div class="log-item">
+                <span class="log-item-delete" onclick="deleteEntry({{ loop.index0 }})">&times;</span>
                 <div class="log-item-header">
                     <div class="log-item-name">{{ entry.name }}</div>
                     <div style="display: flex; align-items: center; gap: 15px;">
@@ -1085,6 +1138,39 @@ def log_food():
             save_food_entry(pad_key, food_key, food_data, current_amount)
         
         mark_updated(nonce)
+        
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise
+
+@app.route('/delete-entry', methods=['POST'])
+def delete_entry():
+    """Delete a food entry from today's log by index"""
+    try:
+        data = request.json
+        if not data or 'index' not in data:
+            return jsonify({'error': 'No index provided'}), 400
+        
+        index = data['index']
+        log_file = os.path.join(LOGS_DIR, date.today().strftime('%Y-%m-%d') + '.json')
+        
+        if not os.path.exists(log_file):
+            return jsonify({'error': 'No log file for today'}), 400
+        
+        with open(log_file, 'r') as f:
+            log_entries = json.load(f)
+        
+        if index < 0 or index >= len(log_entries):
+            return jsonify({'error': 'Invalid index'}), 400
+        
+        del log_entries[index]
+        
+        with open(log_file, 'w') as f:
+            json.dump(log_entries, f, indent=2)
+        
+        mark_updated("delete_entry")
         
         return jsonify({'status': 'success'})
     except Exception as e:
