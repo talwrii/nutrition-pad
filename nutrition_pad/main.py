@@ -25,7 +25,6 @@ app.secret_key = os.urandom(24)
 ensure_logs_directory()
 
 # --- HTML TEMPLATES ---
-
 HTML_INDEX = """
 <!DOCTYPE html>
 <html>
@@ -35,21 +34,30 @@ HTML_INDEX = """
     <link rel="stylesheet" href="/static/base.css">
     <style>
         /* App-specific styles that may change frequently */
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .settings-cog, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
         }
         .settings-cog:hover {
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
         
         .tab-btn.amounts.active {
@@ -68,7 +76,7 @@ HTML_INDEX = """
         /* Square grid layout for food buttons */
         .food-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(90px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             padding: 15px;
         }
@@ -79,7 +87,7 @@ HTML_INDEX = """
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 8px;
+            padding: 16px;
             border-radius: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -99,7 +107,7 @@ HTML_INDEX = """
         }
         
         .food-btn .food-name {
-            font-size: 0.75em;
+            font-size: 2em;
             font-weight: 600;
             color: white;
             text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -111,15 +119,15 @@ HTML_INDEX = """
         
         .food-btn .food-type-indicator {
             position: absolute;
-            top: 4px;
-            right: 4px;
-            font-size: 0.5em;
-            padding: 2px 4px;
-            border-radius: 3px;
+            top: 8px;
+            right: 8px;
+            font-size: 1.4em;
+            padding: 4px 8px;
+            border-radius: 5px;
             background: rgba(0, 0, 0, 0.5);
             color: white;
             line-height: 1;
-            max-width: 40px;
+            max-width: 80px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -131,15 +139,15 @@ HTML_INDEX = """
         
         @media (max-width: 480px) {
             .food-grid {
-                grid-template-columns: repeat(3, minmax(75px, 1fr));
+                grid-template-columns: repeat(3, 1fr);
                 gap: 8px;
                 padding: 10px;
             }
             .food-btn .food-name {
-                font-size: 0.7em;
+                font-size: 1.8em;
             }
             .food-btn .food-type-indicator {
-                font-size: 0.55em;
+                font-size: 1.3em;
             }
         }
         
@@ -211,7 +219,7 @@ HTML_INDEX = """
         
         .preset-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(80px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
         }
         
@@ -235,10 +243,12 @@ HTML_INDEX = """
         }
         
         @media (max-width: 768px) {
-            .settings-cog {
-                font-size: 1.3em;
+            .header-icons {
                 top: 15px;
                 right: 15px;
+            }
+            .settings-cog, .notes-link {
+                font-size: 1.3em;
             }
             
             .amount-display {
@@ -330,7 +340,10 @@ HTML_INDEX = """
 <body>
     <div class="header">
         <h1>Food Pads</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <div class="header-icons">
+            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        </div>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
