@@ -3,6 +3,13 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# Fail if there are any modified files (but allow untracked files)
+if ! git diff-index --quiet HEAD --; then
+    echo "Error: You have uncommitted changes to tracked files"
+    git status --short
+    exit 1
+fi
+
 git push
 
 # Extract version from pyproject.toml if it exists, otherwise fall back to setup.py
