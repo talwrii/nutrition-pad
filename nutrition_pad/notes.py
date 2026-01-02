@@ -1,6 +1,6 @@
 """
 Notes and unknown food resolution functionality.
-- Notes page: Add individual notes with Enter key
+- Notes page: Add individual notes with Enter key or Add button
 - Resolve unknowns: Shows notes alongside unknown entries for resolution
 """
 
@@ -77,6 +77,28 @@ HTML_NOTES = """
         
         .note-input::placeholder {
             color: rgba(255, 255, 255, 0.4);
+        }
+        
+        .add-note-btn {
+            padding: 15px 25px;
+            background: linear-gradient(135deg, #4ecdc4, #00d4ff);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+        
+        .add-note-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(78, 205, 196, 0.4);
+        }
+        
+        .add-note-btn:active {
+            transform: translateY(0);
         }
         
         .notes-list {
@@ -182,6 +204,12 @@ HTML_NOTES = """
         .notes-header p {
             color: rgba(255, 255, 255, 0.7);
         }
+        
+        @media (max-width: 480px) {
+            .add-note-btn {
+                padding: 15px 18px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -204,9 +232,9 @@ HTML_NOTES = """
             <input type="text" 
                    id="noteInput" 
                    class="note-input" 
-                   placeholder="Type a note and press Enter..."
-                   onkeypress="handleKeyPress(event)"
-                   autofocus>
+                   placeholder="Type a note..."
+                   onkeypress="handleKeyPress(event)">
+            <button class="add-note-btn" onclick="submitNote()">Add</button>
         </div>
         
         <div id="notesList" class="notes-list">
@@ -220,7 +248,7 @@ HTML_NOTES = """
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="empty-state">No notes yet. Type above and press Enter.</div>
+                <div class="empty-state">No notes yet. Type above and tap Add.</div>
             {% endif %}
         </div>
     </div>
@@ -237,12 +265,16 @@ HTML_NOTES = """
     <script>
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
-                var input = document.getElementById('noteInput');
-                var text = input.value.trim();
-                if (text) {
-                    addNote(text);
-                    input.value = '';
-                }
+                submitNote();
+            }
+        }
+        
+        function submitNote() {
+            var input = document.getElementById('noteInput');
+            var text = input.value.trim();
+            if (text) {
+                addNote(text);
+                input.value = '';
             }
         }
         

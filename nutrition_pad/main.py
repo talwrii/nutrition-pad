@@ -1058,34 +1058,39 @@ def edit_foods():
 
 @app.route('/log', methods=['POST'])
 def log_food():
-    data = request.json
-    if not data:
-        return jsonify({'error': 'No data'}), 400
-    
-    pad_key = data.get('pad')
-    food_key = data.get('food')
-    nonce = data.get('nonce')
-    
-    if not pad_key or not food_key:
-        return jsonify({'error': 'Missing pad or food key'}), 400
-    
-    # Validate request using data module
-    valid, result = validate_food_request(pad_key, food_key)
-    if not valid:
-        return jsonify({'error': result}), 400
-    
-    food_data = result
-    
-    # Pass amount for amount-based foods, None for unit foods
-    if food_data.get('type') == 'unit':
-        save_food_entry(pad_key, food_key, food_data, None)
-    else:
-        current_amount = get_current_amount()
-        save_food_entry(pad_key, food_key, food_data, current_amount)
-    
-    mark_updated(nonce)
-    
-    return jsonify({'status': 'success'})
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data'}), 400
+        
+        pad_key = data.get('pad')
+        food_key = data.get('food')
+        nonce = data.get('nonce')
+        
+        if not pad_key or not food_key:
+            return jsonify({'error': 'Missing pad or food key'}), 400
+        
+        # Validate request using data module
+        valid, result = validate_food_request(pad_key, food_key)
+        if not valid:
+            return jsonify({'error': result}), 400
+        
+        food_data = result
+        
+        # Pass amount for amount-based foods, None for unit foods
+        if food_data.get('type') == 'unit':
+            save_food_entry(pad_key, food_key, food_data, None)
+        else:
+            current_amount = get_current_amount()
+            save_food_entry(pad_key, food_key, food_data, current_amount)
+        
+        mark_updated(nonce)
+        
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise
 
 # Register polling and styles routes
 register_polling_routes(app)
