@@ -9,6 +9,7 @@ description = "Touch-friendly food pad interface for calorie tracking"
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [ "Flask>=2.0.0", "toml>=0.10.0",]
+
 [[project.authors]]
 name = "talwrii"
 email = "talwrii@gmail.com"
@@ -21,6 +22,7 @@ dev = [ "pytest>=6.0", "black", "flake8",]
 
 [project.scripts]
 nutrition-pad = "nutrition_pad.main:main"
+nutrition-notes = "nutrition_pad.notes_cli:main"
 
 [tool.setuptools]
 py-modules = [ "main",]

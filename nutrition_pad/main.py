@@ -986,7 +986,6 @@ HTML_FOOD_EDITOR = """
 """
 
 # --- ROUTES ---
-
 @app.route('/')
 def index():
     pads = get_all_pads()
@@ -1178,13 +1177,61 @@ def delete_entry():
         traceback.print_exc()
         raise
 
+@app.route('/api/notes')
+def api_notes():
+    """API endpoint to get notes and unknowns as JSON"""
+    from datetime import timedelta
+    
+    days = int(request.args.get('days', 7))
+    
+    result = {
+        'dates': []
+    }
+    
+    for days_ago in range(days):
+        target_date = date.today() - timedelta(days=days_ago)
+        date_str = target_date.strftime('%Y-%m-%d')
+        
+        # Load notes
+        notes_file = os.path.join(LOGS_DIR, f'{date_str}_notes.json')
+        notes = []
+        if os.path.exists(notes_file):
+            try:
+                with open(notes_file, 'r') as f:
+                    notes = json.load(f)
+            except:
+                pass
+        
+        # Load unknowns
+        log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
+        unknowns = []
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r') as f:
+                    log_entries = json.load(f)
+                
+                for i, entry in enumerate(log_entries):
+                    if 'unknown' in entry.get('food', '').lower() or 'unknown' in entry.get('name', '').lower():
+                        entry['index'] = i
+                        unknowns.append(entry)
+            except:
+                pass
+        
+        if notes or unknowns:
+            result['dates'].append({
+                'date': date_str,
+                'notes': notes,
+                'unknowns': unknowns
+            })
+    
+    return jsonify(result)
+
 # Register polling and styles routes
 register_polling_routes(app)
 register_styles_routes(app)
 register_notes_routes(app)
 
 # --- MAIN ---
-
 def main():
     parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')
