@@ -1226,6 +1226,215 @@ def api_notes():
     
     return jsonify(result)
 
+@app.route('/api/foods')
+def api_foods():
+    """API endpoint to get all foods as JSON"""
+    pads = get_all_pads()
+    
+    foods = []
+    for pad_key, pad_data in pads.items():
+        if pad_key == 'amounts':
+            continue
+        
+        pad_name = pad_data.get('name', pad_key)
+        
+        for food_key, food in pad_data.get('foods', {}).items():
+            food_entry = {
+                'pad_key': pad_key,
+                'pad_name': pad_name,
+                'food_key': food_key,
+                'name': food.get('name', food_key),
+                'type': food.get('type', 'amount')
+            }
+            
+            if food.get('type') == 'unit':
+                food_entry['calories'] = food.get('calories', 0)
+                food_entry['protein'] = food.get('protein', 0)
+            else:
+                food_entry['calories_per_gram'] = food.get('calories_per_gram', 0)
+                food_entry['protein_per_gram'] = food.get('protein_per_gram', 0)
+            
+            if food.get('scale') and food.get('scale') != 1.0:
+                food_entry['scale'] = food.get('scale')
+            
+            foods.append(food_entry)
+    
+    return jsonify({'foods': foods})
+
+@app.route('/api/foods/search')
+def api_foods_search():
+    """API endpoint to search foods"""
+    query = request.args.get('q', '').lower()
+    
+    if not query:
+        return jsonify({'error': 'No query provided'}), 400
+    
+    pads = get_all_pads()
+    
+    foods = []
+    for pad_key, pad_data in pads.items():
+        if pad_key == 'amounts':
+            continue
+        
+        pad_name = pad_data.get('name', pad_key)
+        
+        for food_key, food in pad_data.get('foods', {}).items():
+            # Check if query matches
+            if query not in food.get('name', '').lower() and query not in food_key.lower():
+                continue
+            
+            food_entry = {
+                'pad_key': pad_key,
+                'pad_name': pad_name,
+                'food_key': food_key,
+                'name': food.get('name', food_key),
+                'type': food.get('type', 'amount')
+            }
+            
+            if food.get('type') == 'unit':
+                food_entry['calories'] = food.get('calories', 0)
+                food_entry['protein'] = food.get('protein', 0)
+            else:
+                food_entry['calories_per_gram'] = food.get('calories_per_gram', 0)
+                food_entry['protein_per_gram'] = food.get('protein_per_gram', 0)
+            
+            if food.get('scale') and food.get('scale') != 1.0:
+                food_entry['scale'] = food.get('scale')
+            
+            foods.append(food_entry)
+    
+    return jsonify({'foods': foods, 'query': query})
+
+@app.route('/api/foods/<pad_key>/<food_key>')
+def api_foods_get(pad_key, food_key):
+    """API endpoint to get specific food"""
+    try:
+        food_data = get_food_data(pad_key, food_key)
+        
+        food_entry = {
+            'pad_key': pad_key,
+            'food_key': food_key,
+            'name': food_data.get('name', food_key),
+            'type': food_data.get('type', 'amount')
+        }
+        
+        if food_data.get('type') == 'unit':
+            food_entry['calories'] = food_data.get('calories', 0)
+            food_entry['protein'] = food_data.get('protein', 0)
+        else:
+            food_entry['calories_per_gram'] = food_data.get('calories_per_gram', 0)
+            food_entry['protein_per_gram'] = food_data.get('protein_per_gram', 0)
+        
+        if food_data.get('scale') and food_data.get('scale') != 1.0:
+            food_entry['scale'] = food_data.get('scale')
+        
+        return jsonify({'food': food_entry})
+    except:
+        return jsonify({'error': 'Food not found'}), 404
+
+@app.route('/api/foods', methods=['POST'])
+def api_foods_add():
+    """API endpoint to add a food"""
+    data = request.json
+    if not data or 'toml_content' not in data:
+        return jsonify({'success': False, 'error': 'No TOML content provided'}), 400
+    
+    toml_content = data['toml_content']
+    
+    # Parse the TOML fragment
+    try:
+        parsed = toml.loads(toml_content)
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Invalid TOML: {str(e)}'}), 400
+    
+    # Extract pad and food keys from the TOML structure
+    # Expected format: [pads.pad_key.foods.food_key]
+    if 'pads' not in parsed:
+        return jsonify({'success': False, 'error': 'TOML must contain [pads.pad_key.foods.food_key]'}), 400
+    
+    # Find the pad and food
+    pad_key = None
+    food_key = None
+    new_food_data = None
+    
+    for pk, pad_data in parsed['pads'].items():
+        if 'foods' in pad_data:
+            for fk, food_data in pad_data['foods'].items():
+                pad_key = pk
+                food_key = fk
+                new_food_data = food_data
+                break
+        if pad_key:
+            break
+    
+    if not pad_key or not food_key or not new_food_data:
+        return jsonify({'success': False, 'error': 'Could not find food definition in TOML'}), 400
+    
+    # Validate food data
+    if 'name' not in new_food_data:
+        return jsonify({'success': False, 'error': 'Food must have a name'}), 400
+    
+    if 'type' not in new_food_data:
+        return jsonify({'success': False, 'error': 'Food must have a type (amount or unit)'}), 400
+    
+    food_type = new_food_data['type']
+    if food_type not in ['amount', 'unit']:
+        return jsonify({'success': False, 'error': 'Type must be "amount" or "unit"'}), 400
+    
+    if food_type == 'unit':
+        if 'calories' not in new_food_data or 'protein' not in new_food_data:
+            return jsonify({'success': False, 'error': 'Unit foods must have calories and protein'}), 400
+    else:
+        if 'calories_per_gram' not in new_food_data or 'protein_per_gram' not in new_food_data:
+            return jsonify({'success': False, 'error': 'Amount foods must have calories_per_gram and protein_per_gram'}), 400
+    
+    # Load existing config
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = toml.load(f)
+    except FileNotFoundError:
+        return jsonify({'success': False, 'error': 'Config file not found'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading config: {str(e)}'}), 500
+    
+    # Add or update the food
+    if 'pads' not in config:
+        config['pads'] = {}
+    
+    if pad_key not in config['pads']:
+        config['pads'][pad_key] = {'name': pad_key.capitalize(), 'foods': {}}
+    
+    if 'foods' not in config['pads'][pad_key]:
+        config['pads'][pad_key]['foods'] = {}
+    
+    config['pads'][pad_key]['foods'][food_key] = new_food_data
+    
+    # Save config
+    try:
+        # Create backup first
+        backup_file = CONFIG_FILE + '.backup'
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                backup_content = f.read()
+            with open(backup_file, 'w') as f:
+                f.write(backup_content)
+        
+        # Save new config
+        with open(CONFIG_FILE, 'w') as f:
+            toml.dump(config, f)
+        
+        # Trigger polling update
+        mark_updated("food_added")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Food added successfully',
+            'pad_key': pad_key,
+            'food_key': food_key
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error saving config: {str(e)}'}), 500
+
 # Register polling and styles routes
 register_polling_routes(app)
 register_styles_routes(app)
