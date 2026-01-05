@@ -127,21 +127,14 @@ def display_data(dates_data):
     print(f"{'='*60}\n")
 
 def main():
-    parser = argparse.ArgumentParser(description='Show notes and unknowns from nutrition-pad')
+    parser = argparse.ArgumentParser(
+        description='Show notes and unknowns from nutrition-pad',
+        epilog='Server configuration: Use "nutrition-client set-server HOST:PORT" to configure server'
+    )
     parser.add_argument('--days', type=int, default=1, help='Number of days to show (default: 1 = today only)')
     parser.add_argument('--all', action='store_true', help='Show all available days')
-    parser.add_argument('--set-server', metavar='HOST:PORT', help='Set server address (e.g., nutrition.tatw.name:80)')
     parser.add_argument('--local', action='store_true', help='Read from local files instead of server')
     args = parser.parse_args()
-    
-    # Handle --set-server
-    if args.set_server:
-        config = load_config()
-        config['server'] = args.set_server
-        save_config(config)
-        print(f"Server set to: {args.set_server}")
-        print(f"Config saved to: {CONFIG_FILE}")
-        return
     
     # Load config
     config = load_config()
