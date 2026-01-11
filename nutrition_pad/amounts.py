@@ -1,122 +1,119 @@
 """
-Amounts display and management functionality.
-Custom slider built from basic HTML elements.
+Amounts tab functionality - simplified for older browsers (no HTML5 slider)
+Renders the amounts selection interface with buttons only
 """
-from flask import render_template_string
 
-# HTML template with custom slider
+# HTML template for amounts tab
 AMOUNTS_TAB_HTML = """
-<style>
-.custom-slider {
-    padding: 30px 15px;
-}
-.slider-track {
-    position: relative;
-    width: 100%;
-    height: 12px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    cursor: pointer;
-    margin: 20px 0;
-}
-.slider-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    background: linear-gradient(90deg, #ffd93d, #ff6b6b);
-    border-radius: 6px;
-    width: 20%;
-    pointer-events: none;
-    transition: width 0.1s ease;
-}
-.slider-thumb {
-    position: absolute;
-    top: 50%;
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #ffd93d, #ff6b6b);
-    border: 3px solid white;
-    border-radius: 50%;
-    cursor: pointer;
-    left: 20%;
-    margin-top: -16px;
-    margin-left: -16px;
-    box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
-    transition: transform 0.1s ease;
-    z-index: 10;
-}
-.slider-labels {
-    display: flex;
-    justify-content: space-between;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.9em;
-    margin-top: 15px;
-}
-.amount-controls {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin: 20px 0;
-    flex-wrap: wrap;
-}
-.amount-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    padding: 12px 16px;
-    color: white;
-    font-size: 1em;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    min-width: 60px;
-}
-.preset-amounts {
-    margin: 30px 0;
-}
-.preset-amounts h3 {
-    font-size: 1.2em;
-    margin-bottom: 15px;
-    color: rgba(255, 255, 255, 0.7);
-    text-align: center;
-}
-.preset-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 10px;
-}
-.preset-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    padding: 15px 10px;
-    color: white;
-    font-size: 1em;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-align: center;
-}
-</style>
-<div class="amounts-container">
-    <div class="amount-display">{{ current_amount }}g</div>
+<div id="amounts-tab-content">
+    <style>
+        .amount-display {
+            text-align: center;
+            font-size: 4em;
+            font-weight: 700;
+            color: #ffd93d;
+            margin: 40px 0;
+            text-shadow: 0 0 30px rgba(255, 217, 61, 0.5);
+        }
+        
+        .amount-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 20px;
+            flex-wrap: wrap;
+        }
+        
+        .amount-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            color: white;
+            font-size: 1.5em;
+            font-weight: 600;
+            padding: 20px 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 100px;
+            min-height: 60px;
+        }
+        
+        .amount-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: #00d4ff;
+            transform: translateY(-2px);
+        }
+        
+        .amount-btn:active {
+            transform: translateY(0);
+        }
+        
+        .preset-amounts {
+            margin: 40px 20px;
+            text-align: center;
+        }
+        
+        .preset-amounts h3 {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.3em;
+            margin-bottom: 20px;
+        }
+        
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .preset-btn {
+            background: rgba(78, 205, 196, 0.15);
+            border: 2px solid rgba(78, 205, 196, 0.3);
+            border-radius: 12px;
+            color: #4ecdc4;
+            font-size: 1.3em;
+            font-weight: 600;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .preset-btn:hover {
+            background: rgba(78, 205, 196, 0.3);
+            border-color: #4ecdc4;
+            transform: scale(1.05);
+        }
+        
+        .preset-btn:active {
+            transform: scale(0.95);
+        }
+        
+        @media (max-width: 768px) {
+            .amount-display {
+                font-size: 3em;
+                margin: 30px 0;
+            }
+            
+            .amount-btn {
+                font-size: 1.2em;
+                padding: 15px 20px;
+                min-width: 80px;
+            }
+            
+            .preset-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 10px;
+            }
+            
+            .preset-btn {
+                font-size: 1.1em;
+                padding: 15px 10px;
+            }
+        }
+    </style>
     
-    <div class="slider-container">
-        <div class="custom-slider">
-            <div class="slider-track" id="sliderTrack">
-                <div class="slider-fill" id="sliderFill"></div>
-                <div class="slider-thumb" id="sliderThumb"></div>
-            </div>
-            <div class="slider-labels">
-                <span>0g</span>
-                <span>100g</span>
-                <span>200g</span>
-                <span>300g</span>
-                <span>400g</span>
-            </div>
-        </div>
-    </div>
+    <div class="amount-display" id="amount-display">{{ current_amount }}g</div>
     
     <div class="amount-controls">
         <button class="amount-btn" onclick="adjustAmount(-25)">-25g</button>
@@ -127,92 +124,86 @@ AMOUNTS_TAB_HTML = """
     
     <div class="preset-amounts">
         <h3>Quick Amounts</h3>
-        <div class="preset-grid"></div>
+        <div class="preset-grid" id="preset-grid"></div>
     </div>
 </div>
 """
 
-# JavaScript for amounts functionality
+# JavaScript for amounts functionality - simplified for older browsers
 AMOUNTS_JAVASCRIPT = """
-var currentAmountValue = 100;
-
-function getCurrentAmount() {
-    return currentAmountValue;
-}
-
-function setCurrentAmount(amount) {
-    amount = parseFloat(amount);
-    if (isNaN(amount)) amount = 100;
-    if (amount < 0) amount = 0;
-    if (amount > 400) amount = 400;
+<script>
+(function() {
+    var currentAmount = parseInt('{{ current_amount }}') || 100;
     
-    currentAmountValue = amount;
-    updateAmountDisplay(amount);
-}
-
-function adjustAmount(delta) {
-    var newAmount = Math.max(0, Math.min(400, currentAmountValue + delta));
-    setCurrentAmount(newAmount);
-}
-
-function updateAmountDisplay(amount) {
-    currentAmountValue = amount;
-    
-    var amountEls = document.querySelectorAll('.current-amount, .amount-display');
-    for (var i = 0; i < amountEls.length; i++) {
-        amountEls[i].textContent = amount + 'g';
+    // Update amount display
+    function updateDisplay(amount) {
+        var display = document.getElementById('amount-display');
+        if (display) {
+            display.textContent = amount + 'g';
+        }
+        
+        // Update global amount in parent page
+        if (window.setAmount) {
+            window.setAmount(amount);
+        }
+        
+        // Update header display
+        var headerAmount = document.querySelector('.current-amount');
+        if (headerAmount) {
+            headerAmount.textContent = amount + 'g';
+        }
     }
     
-    updateSliderPosition(amount);
-}
-
-function updateSliderPosition(amount) {
-    var sliderThumb = document.getElementById('sliderThumb');
-    var sliderFill = document.getElementById('sliderFill');
-    if (!sliderThumb || !sliderFill) return;
+    // Adjust amount by delta
+    window.adjustAmount = function(delta) {
+        currentAmount = currentAmount + delta;
+        if (currentAmount < 0) currentAmount = 0;
+        if (currentAmount > 400) currentAmount = 400;
+        updateDisplay(currentAmount);
+    };
     
-    var percentage = Math.max(0, Math.min(100, (amount / 400) * 100));
-    sliderThumb.style.left = percentage + '%';
-    sliderFill.style.width = percentage + '%';
-}
-
-function createPresetButtons() {
-    var presetGrid = document.querySelector('.preset-grid');
-    if (!presetGrid) return;
+    // Set amount to specific value
+    window.setAmountTo = function(amount) {
+        currentAmount = amount;
+        updateDisplay(currentAmount);
+    };
     
-    var presets = [50, 100, 150, 200, 250, 300, 350, 400];
-    presetGrid.innerHTML = '';
-    
-    for (var i = 0; i < presets.length; i++) {
-        var amount = presets[i];
-        var btn = document.createElement('button');
-        btn.className = 'preset-btn';
-        btn.textContent = amount + 'g';
+    // Initialize preset buttons
+    function initializePresets() {
+        var presetGrid = document.getElementById('preset-grid');
+        if (!presetGrid) return;
         
-        (function(amt) {
-            btn.onclick = function() {
-                setCurrentAmount(amt);
-            };
-        })(amount);
+        var presets = [50, 100, 150, 200, 250, 300, 350, 400];
+        presetGrid.innerHTML = '';
         
-        presetGrid.appendChild(btn);
+        for (var i = 0; i < presets.length; i++) {
+            var amount = presets[i];
+            var btn = document.createElement('button');
+            btn.className = 'preset-btn';
+            btn.textContent = amount + 'g';
+            btn.onclick = (function(amt) {
+                return function() {
+                    setAmountTo(amt);
+                };
+            })(amount);
+            presetGrid.appendChild(btn);
+        }
     }
-}
-
-function initializeAmountsTab() {
-    var currentAmount = getCurrentAmount();
-    updateAmountDisplay(currentAmount);
     
-    setTimeout(function() {
-        createPresetButtons();
-    }, 100);
-}
+    // Initialize on load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializePresets);
+    } else {
+        initializePresets();
+    }
+})();
+</script>
 """
 
 def render_amounts_tab(current_amount):
-    """Render the amounts tab content"""
-    return render_template_string(AMOUNTS_TAB_HTML, current_amount=current_amount)
+    """Render the amounts tab HTML"""
+    return AMOUNTS_TAB_HTML.replace('{{ current_amount }}', str(current_amount))
 
 def get_amounts_javascript():
-    """Get the JavaScript code for amounts functionality"""
+    """Get the amounts tab JavaScript"""
     return AMOUNTS_JAVASCRIPT
