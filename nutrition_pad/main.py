@@ -261,6 +261,7 @@ HTML_INDEX = """
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="current-amount">{{ current_amount }}g</div>
+        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
@@ -443,6 +444,8 @@ HTML_TODAY = """
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
+        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
+        <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
     <div class="log-container">
@@ -985,6 +988,8 @@ def index():
     
     daily_total = calculate_daily_total()
     item_count = calculate_daily_item_count()
+    stats = calculate_nutrition_stats()
+    avg_ratio = stats['avg_ratio']
     current_amount = get_current_amount()
     # Format as int if whole number for cleaner display
     current_amount_display = int(current_amount) if current_amount == int(current_amount) else current_amount
@@ -1002,6 +1007,7 @@ def index():
                                 current_pad_data=current_pad_data,
                                 daily_total=daily_total,
                                 item_count=item_count,
+                                avg_ratio=avg_ratio,
                                 current_amount=current_amount_display,
                                 amounts_content=amounts_content,
                                 amounts_javascript=amounts_javascript,
@@ -1011,10 +1017,15 @@ def index():
 def today_log():
     log_entries = load_today_log()
     total_protein = calculate_daily_total()
+    stats = calculate_nutrition_stats()
+    avg_ratio = stats['avg_ratio']
+    item_count = calculate_daily_item_count()
     
     return render_template_string(HTML_TODAY,
                                 log_entries=log_entries,
                                 total_protein=total_protein,
+                                avg_ratio=avg_ratio,
+                                item_count=item_count,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/nutrition')

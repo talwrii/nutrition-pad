@@ -229,7 +229,8 @@ HTML_NOTES = """
             <a href="/resolve-unknowns" class="notes-link" title="Resolve Items"><i class="fas fa-search"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
-        <div class="item-count">{{ date_display }}</div>
+        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
+        <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
     <div class="notes-container">
@@ -569,6 +570,8 @@ HTML_RESOLVE_UNKNOWNS = """
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
+        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
+        <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
     <div class="resolve-container">
@@ -860,18 +863,28 @@ def get_unknown_entries(log_entries):
 def register_notes_routes(app):
     """Register notes routes with the Flask app"""
     
-    from .data import load_today_log, get_all_pads, get_food_data, LOGS_DIR
+    from .data import (
+        load_today_log, 
+        get_all_pads, 
+        get_food_data, 
+        LOGS_DIR,
+        calculate_nutrition_stats,
+        calculate_daily_item_count
+    )
     from .polling import mark_updated
     import json as json_module
     
     @app.route('/notes')
     def notes_page():
         notes = load_notes()
-        date_display = date.today().strftime('%A, %B %d, %Y')
+        stats = calculate_nutrition_stats()
+        avg_ratio = stats['avg_ratio']
+        item_count = calculate_daily_item_count()
         
         return render_template_string(HTML_NOTES,
                                     notes=notes,
-                                    date_display=date_display)
+                                    avg_ratio=avg_ratio,
+                                    item_count=item_count)
     
     @app.route('/add-note', methods=['POST'])
     def add_note():
@@ -954,7 +967,6 @@ def register_notes_routes(app):
         for days_ago in [0, 1]:
             target_date = date.today() - timedelta(days=days_ago)
             date_str = target_date.strftime('%Y-%m-%d')
-            date_label = 'Today' if days_ago == 0 else 'Yesterday'
             
             # Load notes for this day
             notes_file = os.path.join(NOTES_DIR, f'{date_str}_notes.json')
@@ -967,7 +979,7 @@ def register_notes_routes(app):
                             'card_type': 'note',
                             'id': note['id'],
                             'name': note['text'],
-                            'details': date_label,
+                            'details': '',
                             'time': note.get('time', ''),
                             'timestamp': note.get('timestamp', ''),
                             'done': note.get('done', False),
@@ -990,7 +1002,7 @@ def register_notes_routes(app):
                                 'card_type': 'unknown',
                                 'id': str(i),
                                 'name': entry.get('name', 'Unknown'),
-                                'details': f"{entry.get('amount_display', '')} • {date_label}",
+                                'details': entry.get('amount_display', ''),
                                 'time': entry.get('time', ''),
                                 'timestamp': entry.get('timestamp', ''),
                                 'done': False,
@@ -1006,8 +1018,14 @@ def register_notes_routes(app):
         resolved = [i for i in items if i.get('done') or i.get('resolved')]
         items = unresolved + resolved
         
+        stats = calculate_nutrition_stats()
+        avg_ratio = stats['avg_ratio']
+        item_count = calculate_daily_item_count()
+        
         return render_template_string(HTML_RESOLVE_UNKNOWNS,
                                     items=items,
+                                    avg_ratio=avg_ratio,
+                                    item_count=item_count,
                                     foods_json=json_module.dumps(all_foods))
     
     @app.route('/resolve-unknown', methods=['POST'])

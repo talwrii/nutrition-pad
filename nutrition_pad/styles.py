@@ -2,7 +2,6 @@
 General-purpose CSS styles for the nutrition pad application.
 Contains stable, foundational styles that rarely change.
 """
-
 from flask import Response
 
 # Base CSS styles - foundational styles that rarely change
@@ -168,6 +167,15 @@ body {
     text-shadow: 0 0 20px rgba(255, 217, 61, 0.3);
 }
 
+.cal-per-protein {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #ff6b6b;
+    text-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
+}
+
 .item-count {
     text-align: center;
     margin-top: 10px;
@@ -319,6 +327,7 @@ body {
 .stat-value.calories { color: #ff6b6b; }
 .stat-value.protein { color: #4ecdc4; }
 .stat-value.ratio { color: #00d4ff; }
+.stat-value.time-since { color: #ffd93d; }
 
 .stat-label {
     font-size: 1em;
@@ -370,14 +379,16 @@ body {
         margin-right: 0;
         margin-bottom: 5px;
     }
+    
+    .stat-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 """
-
 
 def get_base_css():
     """Get the base CSS styles"""
     return BASE_CSS
-
 
 def register_styles_routes(app):
     """Register CSS serving routes with the Flask app"""

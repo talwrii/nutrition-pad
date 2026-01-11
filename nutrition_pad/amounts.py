@@ -110,10 +110,10 @@ AMOUNTS_TAB_HTML = """
             </div>
             <div class="slider-labels">
                 <span>0g</span>
-                <span>125g</span>
-                <span>250g</span>
-                <span>375g</span>
-                <span>500g</span>
+                <span>100g</span>
+                <span>200g</span>
+                <span>300g</span>
+                <span>400g</span>
             </div>
         </div>
     </div>
@@ -144,14 +144,14 @@ function setCurrentAmount(amount) {
     amount = parseFloat(amount);
     if (isNaN(amount)) amount = 100;
     if (amount < 0) amount = 0;
-    if (amount > 500) amount = 500;
+    if (amount > 400) amount = 400;
     
     currentAmountValue = amount;
     updateAmountDisplay(amount);
 }
 
 function adjustAmount(delta) {
-    var newAmount = Math.max(0, Math.min(500, currentAmountValue + delta));
+    var newAmount = Math.max(0, Math.min(400, currentAmountValue + delta));
     setCurrentAmount(newAmount);
 }
 
@@ -171,7 +171,7 @@ function updateSliderPosition(amount) {
     var sliderFill = document.getElementById('sliderFill');
     if (!sliderThumb || !sliderFill) return;
     
-    var percentage = Math.max(0, Math.min(100, (amount / 500) * 100));
+    var percentage = Math.max(0, Math.min(100, (amount / 400) * 100));
     sliderThumb.style.left = percentage + '%';
     sliderFill.style.width = percentage + '%';
 }
@@ -180,7 +180,7 @@ function createPresetButtons() {
     var presetGrid = document.querySelector('.preset-grid');
     if (!presetGrid) return;
     
-    var presets = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500];
+    var presets = [50, 100, 150, 200, 250, 300, 350, 400];
     presetGrid.innerHTML = '';
     
     for (var i = 0; i < presets.length; i++) {
