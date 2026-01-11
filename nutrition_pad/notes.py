@@ -3,7 +3,6 @@ Notes and unknown food resolution functionality.
 - Notes page: Add individual notes with Enter key or Add button
 - Resolve unknowns: Shows notes alongside unknown entries for resolution
 """
-
 import os
 import json
 from datetime import date, datetime
@@ -12,7 +11,6 @@ from flask import render_template_string, request, jsonify
 NOTES_DIR = 'daily_logs'
 
 # --- HTML Templates ---
-
 HTML_NOTES = """
 <!DOCTYPE html>
 <html>
@@ -20,6 +18,7 @@ HTML_NOTES = """
     <title>Food Notes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .header-icons {
             position: absolute;
@@ -45,6 +44,18 @@ HTML_NOTES = """
             color: #ff6b6b;
             transform: scale(1.1);
             text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        .amounts-link {
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .amounts-link:hover {
+            color: #4ecdc4;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
         }
         
         .notes-container {
@@ -123,9 +134,7 @@ HTML_NOTES = """
         }
         
         .note-item.done {
-            opacity: 0.5;
-            background: rgba(78, 205, 196, 0.1);
-            border-color: rgba(78, 205, 196, 0.3);
+            display: none;  /* Hide completed notes */
         }
         
         .note-item.done .note-text {
@@ -216,8 +225,9 @@ HTML_NOTES = """
     <div class="header">
         <h1>Food Notes</h1>
         <div class="header-icons">
-            <a href="/resolve-unknowns" class="notes-link" title="Resolve Items">🔍</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/resolve-unknowns" class="notes-link" title="Resolve Items"><i class="fas fa-search"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="item-count">{{ date_display }}</div>
     </div>
@@ -325,6 +335,7 @@ HTML_RESOLVE_UNKNOWNS = """
     <title>Resolve Items</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .header-icons {
             position: absolute;
@@ -350,6 +361,18 @@ HTML_RESOLVE_UNKNOWNS = """
             color: #ff6b6b;
             transform: scale(1.1);
             text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        .amounts-link {
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .amounts-link:hover {
+            color: #4ecdc4;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
         }
         
         .resolve-container {
@@ -542,8 +565,9 @@ HTML_RESOLVE_UNKNOWNS = """
     <div class="header">
         <h1>Resolve Items</h1>
         <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
     </div>
     
@@ -593,7 +617,7 @@ HTML_RESOLVE_UNKNOWNS = """
     
     <div class="bottom-nav">
         <button class="bottom-nav-btn" onclick="window.location.href='/notes'">
-            📝 Add Notes
+            <i class="fas fa-sticky-note"></i> Add Notes
         </button>
         <button class="bottom-nav-btn" onclick="window.location.href='/nutrition'" style="background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
             Back to Dashboard
@@ -769,12 +793,10 @@ HTML_RESOLVE_UNKNOWNS = """
 </html>
 """
 
-
 def get_notes_file():
     """Get path to today's notes file (JSON format)"""
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(NOTES_DIR, f'{today}_notes.json')
-
 
 def load_notes():
     """Load today's notes as list of dicts"""
@@ -788,7 +810,6 @@ def load_notes():
     except:
         return []
 
-
 def save_notes(notes):
     """Save notes list to file"""
     notes_file = get_notes_file()
@@ -796,7 +817,6 @@ def save_notes(notes):
     
     with open(notes_file, 'w') as f:
         json.dump(notes, f, indent=2)
-
 
 def get_all_foods_flat(pads):
     """Get all foods as a flat list for fuzzy search"""
@@ -826,7 +846,6 @@ def get_all_foods_flat(pads):
     
     return foods
 
-
 def get_unknown_entries(log_entries):
     """Get unknown entries from today's log with their indices"""
     unknowns = []
@@ -837,7 +856,6 @@ def get_unknown_entries(log_entries):
             entry_copy['resolved'] = bool(entry.get('resolved_to'))
             unknowns.append(entry_copy)
     return unknowns
-
 
 def register_notes_routes(app):
     """Register notes routes with the Flask app"""

@@ -13,7 +13,8 @@ from .amounts import render_amounts_tab, get_amounts_javascript
 from .data import (
     ensure_logs_directory, load_config, load_today_log, save_food_entry,
     calculate_daily_total, calculate_daily_item_count, calculate_nutrition_stats,
-    validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR
+    validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR,
+    calculate_time_since_last_ate
 )
 from .styles import register_styles_routes
 from .notes import register_notes_routes
@@ -25,6 +26,7 @@ app.secret_key = os.urandom(24)
 ensure_logs_directory()
 
 # --- HTML TEMPLATES ---
+
 HTML_INDEX = """
 <!DOCTYPE html>
 <html>
@@ -32,6 +34,7 @@ HTML_INDEX = """
     <title>Food Pads</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* App-specific styles that may change frequently */
         .header-icons {
@@ -42,12 +45,19 @@ HTML_INDEX = """
             gap: 15px;
             z-index: 10;
         }
-        .settings-cog, .notes-link {
+        .settings-cog, .notes-link, .amounts-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
             cursor: pointer;
+            /* Larger touch target for tablets */
+            padding: 10px;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .settings-cog:hover {
             color: #ffd93d;
@@ -59,10 +69,10 @@ HTML_INDEX = """
             transform: scale(1.1);
             text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
-        
-        .tab-btn.amounts.active {
-            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
-            box-shadow: 0 10px 30px rgba(255, 217, 61, 0.3);
+        .amounts-link:hover {
+            color: #4ecdc4;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
         }
         
         .food-btn.amount-food {
@@ -151,108 +161,13 @@ HTML_INDEX = """
             }
         }
         
-        /* Amounts-specific styles */
-        .amounts-container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-        
-        .amount-display {
-            text-align: center;
-            font-size: 3em;
-            font-weight: 700;
-            color: #ffd93d;
-            margin-bottom: 30px;
-            text-shadow: 0 0 20px rgba(255, 217, 61, 0.3);
-        }
-        
-        .slider-container {
-            margin: 40px 0;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            backdrop-filter: blur(20px);
-        }
-        
-        .slider {
-            width: 100%;
-            height: 8px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            outline: none;
-            -webkit-appearance: none;
-            margin: 20px 0;
-        }
-        
-        .slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
-        }
-        
-        .slider::-moz-range-thumb {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
-        }
-        
-        .preset-amounts {
-            margin: 30px 0;
-        }
-        
-        .preset-amounts h3 {
-            font-size: 1.2em;
-            margin-bottom: 15px;
-            color: rgba(255, 255, 255, 0.7);
-            text-align: center;
-        }
-        
-        .preset-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-        }
-        
-        .preset-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-            padding: 15px 10px;
-            color: white;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-        
-        .preset-btn:hover {
-            background: rgba(255, 217, 61, 0.2);
-            border-color: #ffd93d;
-            transform: translateY(-2px);
-        }
-        
         @media (max-width: 768px) {
             .header-icons {
                 top: 15px;
                 right: 15px;
             }
-            .settings-cog, .notes-link {
+            .settings-cog, .notes-link, .amounts-link {
                 font-size: 1.3em;
-            }
-            
-            .amount-display {
-                font-size: 2.5em;
             }
         }
     </style>
@@ -341,8 +256,9 @@ HTML_INDEX = """
     <div class="header">
         <h1>Food Pads</h1>
         <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="item-count">{{ item_count }} items logged today</div>
@@ -350,10 +266,12 @@ HTML_INDEX = """
     
     <div class="nav-tabs">
         {% for pad_key, pad_data in pads.items() %}
-        <a class="tab-btn {% if pad_key == 'amounts' %}amounts{% endif %} {% if pad_key == current_pad %}active{% endif %}" 
+        {% if pad_key != 'amounts' %}
+        <a class="tab-btn {% if pad_key == current_pad %}active{% endif %}" 
            href="/?pad={{ pad_key }}">
             {{ pad_data.name }}
         </a>
+        {% endif %}
         {% endfor %}
     </div>
     
@@ -396,6 +314,7 @@ HTML_TODAY = """
     <title>Today's Log</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .header-icons {
             position: absolute;
@@ -411,6 +330,12 @@ HTML_TODAY = """
             text-decoration: none;
             transition: all 0.3s ease;
             cursor: pointer;
+            padding: 10px;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .settings-cog:hover {
             color: #ffd93d;
@@ -514,8 +439,8 @@ HTML_TODAY = """
     <div class="header">
         <h1>Today's Log</h1>
         <div class="header-icons">
-            <a href="/notes" class="notes-link" title="Food Notes">📝</a>
-            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
     </div>
@@ -556,6 +481,7 @@ HTML_NUTRITION = """
     <title>Nutrition Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .settings-cog {
             position: absolute;
@@ -567,6 +493,12 @@ HTML_NUTRITION = """
             transition: all 0.3s ease;
             z-index: 10;
             cursor: pointer;
+            padding: 10px;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .settings-cog:hover {
             color: #ffd93d;
@@ -643,7 +575,6 @@ HTML_NUTRITION = """
         function simplePoll() {
             if (isPolling) return;
             isPolling = true;
-            
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
             xhr.onreadystatechange = function() {
@@ -667,21 +598,47 @@ HTML_NUTRITION = """
             };
             xhr.send();
         }
-        
+        function updateTimeSinceAte() {
+            var timeEl = document.getElementById('time-since-ate');
+            if (!timeEl) return;
+            var lastMealTimestamp = timeEl.getAttribute('data-last-meal-timestamp');
+            if (!lastMealTimestamp) {
+                timeEl.textContent = '--';
+                return;
+            }
+            try {
+                var lastMealTime = new Date(lastMealTimestamp);
+                var now = new Date();
+                var diffMs = now - lastMealTime;
+                var diffMinutes = Math.floor(diffMs / (1000 * 60));
+                if (diffMinutes < 60) {
+                    timeEl.textContent = diffMinutes + 'm';
+                } else {
+                    var hours = Math.floor(diffMinutes / 60);
+                    var minutes = diffMinutes % 60;
+                    timeEl.textContent = hours + 'h ' + minutes + 'm';
+                }
+            } catch (e) {
+                console.error('Error updating time since ate:', e);
+            }
+        }
         window.onload = function() {
             simplePoll();
+            updateTimeSinceAte();
+            // Update time display every 5 minutes (300000 ms)
+            setInterval(updateTimeSinceAte, 300000);
         };
     </script>
 </head>
 <body>
     <div class="header">
         <h1>Nutrition Dashboard</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration">⚙️</a>
+        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
     </div>
     
     <div class="nav-links">
-        <a href="/notes" class="nav-link notes">📝 Food Notes</a>
-        <a href="/resolve-unknowns" class="nav-link resolve">🔍 Resolve Unknowns</a>
+        <a href="/notes" class="nav-link notes"><i class="fas fa-sticky-note"></i> Food Notes</a>
+        <a href="/resolve-unknowns" class="nav-link resolve"><i class="fas fa-search"></i> Resolve Unknowns</a>
     </div>
     
     <div class="nutrition-stats">
@@ -697,6 +654,20 @@ HTML_NUTRITION = """
             <div class="stat-card">
                 <div class="stat-value ratio">{{ avg_ratio }}</div>
                 <div class="stat-label">Avg P/Cal</div>
+            </div>
+            <div class="stat-card">
+                <div id="time-since-ate" class="stat-value time-since" data-last-meal-timestamp="{{ time_since_last_ate.timestamp if time_since_last_ate else '' }}">
+                    {% if time_since_last_ate is not none %}
+                        {% if time_since_last_ate.minutes < 60 %}
+                            {{ time_since_last_ate.minutes }}m
+                        {% else %}
+                            {{ (time_since_last_ate.minutes // 60) }}h {{ (time_since_last_ate.minutes % 60) }}m
+                        {% endif %}
+                    {% else %}
+                        --
+                    {% endif %}
+                </div>
+                <div class="stat-label">Since Last Ate</div>
             </div>
         </div>
     </div>
@@ -717,6 +688,7 @@ HTML_FOOD_EDITOR = """
     <title>Edit Foods Configuration</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .editor-container {
             max-width: 1000px;
@@ -902,7 +874,6 @@ HTML_FOOD_EDITOR = """
                 <code>protein_per_gram = 0.27</code><br><br>
                 
                 <strong>💡 Tips:</strong><br>
-                • Always include the "amounts" pad for the amount selector<br>
                 • Use descriptive food keys (no spaces, use underscores)<br>
                 • Make sure to save your changes before leaving this page<br>
                 • Invalid TOML format will prevent saving
@@ -986,6 +957,7 @@ HTML_FOOD_EDITOR = """
 """
 
 # --- ROUTES ---
+
 @app.route('/')
 def index():
     pads = get_all_pads()
@@ -999,12 +971,13 @@ def index():
     
     # If no pad specified or invalid pad, default to first available pad or amounts
     if not current_pad or current_pad not in pads:
-        if 'amounts' in pads:
-            current_pad = 'amounts'
-        elif pads:
-            current_pad = list(pads.keys())[0]
-        else:
-            # Fallback - should never happen now
+        # Find first non-amounts pad
+        for pad_key in pads.keys():
+            if pad_key != 'amounts':
+                current_pad = pad_key
+                break
+        # If only amounts exists, use it
+        if not current_pad:
             current_pad = 'amounts'
     
     # Get current pad data
@@ -1048,12 +1021,14 @@ def today_log():
 def nutrition_dashboard():
     log_entries = load_today_log()
     stats = calculate_nutrition_stats()
+    time_since_last_ate = calculate_time_since_last_ate()
     
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
                                 total_protein=stats['total_protein'],
                                 avg_ratio=stats['avg_ratio'],
+                                time_since_last_ate=time_since_last_ate,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 @app.route('/edit-foods', methods=['GET', 'POST'])
@@ -1441,6 +1416,7 @@ register_styles_routes(app)
 register_notes_routes(app)
 
 # --- MAIN ---
+
 def main():
     parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')

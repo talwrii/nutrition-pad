@@ -2,7 +2,6 @@
 Food entry database operations and nutrition calculations.
 Handles daily logs, configuration loading, and nutrition statistics.
 """
-
 import json
 import os
 import toml
@@ -118,7 +117,6 @@ protein = 0
 name = "Set Amount"
 """
 
-
 def parse_scale(scale_str):
     """Parse scale expressions like '3/4', '2*3', '1/2/3' into float"""
     if not scale_str or scale_str == "1" or scale_str == 1:
@@ -148,12 +146,10 @@ def parse_scale(scale_str):
         print(f"Error parsing scale '{scale_str}': {e}")
         return 1.0  # Default to no scaling on error
 
-
 def ensure_logs_directory():
     """Create logs directory if it doesn't exist"""
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR)
-
 
 def load_config():
     """Load TOML config file, create default if not exists"""
@@ -164,12 +160,10 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         return toml.load(f)
 
-
 def get_today_log_file():
     """Get path to today's log file"""
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOGS_DIR, f'{today}.json')
-
 
 def load_today_log():
     """Load today's food log"""
@@ -179,7 +173,6 @@ def load_today_log():
     
     with open(log_file, 'r') as f:
         return json.load(f)
-
 
 def save_food_entry(pad_key, food_key, food_data, amount=None):
     """Save a food entry to today's log with specified amount or unit, applying scale if present"""
@@ -229,18 +222,15 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     with open(log_file, 'w') as f:
         json.dump(log, f, indent=2)
 
-
 def calculate_daily_total():
     """Calculate total protein for today"""
     log = load_today_log()
     return round(sum(entry.get('protein', 0) for entry in log), 1)
 
-
 def calculate_daily_item_count():
     """Calculate total items logged for today"""
     log = load_today_log()
     return len(log)
-
 
 def calculate_nutrition_stats():
     """Calculate comprehensive nutrition stats for today"""
@@ -264,6 +254,33 @@ def calculate_nutrition_stats():
         'avg_ratio': f"{avg_ratio:.2f}"
     }
 
+def calculate_time_since_last_ate():
+    """Calculate time since last food entry"""
+    log = load_today_log()
+    
+    if not log:
+        return None
+    
+    # Get the most recent entry
+    last_entry = log[-1]
+    timestamp_str = last_entry.get('timestamp')
+    
+    if not timestamp_str:
+        return None
+    
+    try:
+        last_time = datetime.fromisoformat(timestamp_str)
+        now = datetime.now()
+        diff = now - last_time
+        
+        minutes = int(diff.total_seconds() / 60)
+        
+        return {
+            'minutes': minutes,
+            'timestamp': timestamp_str
+        }
+    except:
+        return None
 
 def get_all_pads():
     """Get all pads from the configuration"""
@@ -299,7 +316,6 @@ def get_all_pads():
     
     return pads
 
-
 def validate_food_request(pad_key, food_key):
     """Validate that a pad and food key exist in the config"""
     # Use get_all_pads() to include dynamically injected unknown foods
@@ -312,7 +328,6 @@ def validate_food_request(pad_key, food_key):
         return False, 'Invalid food'
     
     return True, pads[pad_key]['foods'][food_key]
-
 
 def get_food_data(pad_key, food_key):
     """Get food data for a specific pad and food key"""
