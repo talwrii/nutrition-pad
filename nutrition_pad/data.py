@@ -255,32 +255,47 @@ def calculate_nutrition_stats():
     }
 
 def calculate_time_since_last_ate():
-    """Calculate time since last food entry"""
-    log = load_today_log()
+    """Calculate time since last food entry, checking today and previous days"""
+    from datetime import timedelta
     
-    if not log:
-        return None
-    
-    # Get the most recent entry
-    last_entry = log[-1]
-    timestamp_str = last_entry.get('timestamp')
-    
-    if not timestamp_str:
-        return None
-    
-    try:
-        last_time = datetime.fromisoformat(timestamp_str)
-        now = datetime.now()
-        diff = now - last_time
+    # Check today and up to 7 days back
+    for days_ago in range(8):
+        target_date = date.today() - timedelta(days=days_ago)
+        date_str = target_date.strftime('%Y-%m-%d')
+        log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
         
-        minutes = int(diff.total_seconds() / 60)
-        
-        return {
-            'minutes': minutes,
-            'timestamp': timestamp_str
-        }
-    except:
-        return None
+        if not os.path.exists(log_file):
+            continue
+            
+        try:
+            with open(log_file, 'r') as f:
+                log = json.load(f)
+            
+            if not log:
+                continue
+            
+            # Get the most recent entry from this day
+            last_entry = log[-1]
+            timestamp_str = last_entry.get('timestamp')
+            
+            if not timestamp_str:
+                continue
+            
+            last_time = datetime.fromisoformat(timestamp_str)
+            now = datetime.now()
+            diff = now - last_time
+            
+            minutes = int(diff.total_seconds() / 60)
+            
+            return {
+                'minutes': minutes,
+                'timestamp': timestamp_str
+            }
+        except:
+            continue
+    
+    # No entries found in the last 7 days
+    return None
 
 def get_all_pads():
     """Get all pads from the configuration"""
