@@ -18,6 +18,7 @@ from .data import (
 )
 from .styles import register_styles_routes
 from .notes import register_notes_routes
+from .calories import register_calories_routes
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -261,7 +262,7 @@ HTML_INDEX = """
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="current-amount">{{ current_amount }}g</div>
-        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
+        <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
@@ -444,7 +445,7 @@ HTML_TODAY = """
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
-        <div class="cal-per-protein">{{ avg_ratio }} cal/g protein</div>
+        <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
     
@@ -486,15 +487,20 @@ HTML_NUTRITION = """
     <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .settings-cog {
+        .header-icons {
             position: absolute;
             top: 20px;
             right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        
+        .settings-cog, .home-link, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
             transition: all 0.3s ease;
-            z-index: 10;
             cursor: pointer;
             padding: 10px;
             min-width: 44px;
@@ -507,6 +513,16 @@ HTML_NUTRITION = """
             color: #ffd93d;
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        .home-link:hover {
+            color: #4ecdc4;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+        }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
         }
         
         .nav-links {
@@ -555,6 +571,16 @@ HTML_NUTRITION = """
         .nav-link.resolve:hover {
             background: rgba(78, 205, 196, 0.2);
             border-color: #4ecdc4;
+        }
+        
+        .nav-link.timeline {
+            background: rgba(255, 107, 107, 0.1);
+            border-color: rgba(255, 107, 107, 0.3);
+        }
+        
+        .nav-link.timeline:hover {
+            background: rgba(255, 107, 107, 0.2);
+            border-color: #ff6b6b;
         }
         
         @media (max-width: 768px) {
@@ -636,27 +662,28 @@ HTML_NUTRITION = """
 <body>
     <div class="header">
         <h1>Nutrition Dashboard</h1>
-        <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
-    </div>
-    
-    <div class="nav-links">
-        <a href="/notes" class="nav-link notes"><i class="fas fa-sticky-note"></i> Food Notes</a>
-        <a href="/resolve-unknowns" class="nav-link resolve"><i class="fas fa-search"></i> Resolve Unknowns</a>
+        <div class="header-icons">
+            <a href="/" class="home-link" title="Food Pads"><i class="fas fa-utensils"></i></a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
+        </div>
     </div>
     
     <div class="nutrition-stats">
         <div class="stat-cards">
             <div class="stat-card">
                 <div class="stat-value calories">{{ total_calories }}</div>
+                <div class="stat-sub">({{ cal_per_hour }}/h)</div>
                 <div class="stat-label">Calories</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value protein">{{ total_protein }}g</div>
+                <div class="stat-sub">({{ protein_per_hour }}g/h)</div>
                 <div class="stat-label">Protein</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value ratio">{{ avg_ratio }}</div>
-                <div class="stat-label">Avg P/Cal</div>
+                <div class="stat-value fiber">{{ total_fiber }}g</div>
+                <div class="stat-label">Fiber</div>
             </div>
             <div class="stat-card">
                 <div id="time-since-ate" class="stat-value time-since" data-last-meal-timestamp="{{ time_since_last_ate.timestamp if time_since_last_ate else '' }}">
@@ -672,12 +699,20 @@ HTML_NUTRITION = """
                 </div>
                 <div class="stat-label">Since Last Ate</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-value ratio">{{ avg_ratio }}</div>
+                <div class="stat-label">kcal/g Protein</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value fiber-ratio">{{ kcal_per_fiber }}</div>
+                <div class="stat-label">kcal/g Fiber</div>
+            </div>
         </div>
     </div>
     
     <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="window.location.href='/'">
-            Back to Food Pads
+        <button class="bottom-nav-btn" onclick="window.location.href='/calories'" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
+            <i class="fas fa-chart-line"></i> Timeline
         </button>
     </div>
 </body>
@@ -1013,6 +1048,7 @@ def index():
                                 amounts_javascript=amounts_javascript,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
+
 @app.route('/today')
 def today_log():
     log_entries = load_today_log()
@@ -1028,6 +1064,7 @@ def today_log():
                                 item_count=item_count,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
+
 @app.route('/nutrition')
 def nutrition_dashboard():
     log_entries = load_today_log()
@@ -1038,9 +1075,14 @@ def nutrition_dashboard():
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
                                 total_protein=stats['total_protein'],
+                                total_fiber=stats.get('total_fiber', 0),
                                 avg_ratio=stats['avg_ratio'],
+                                cal_per_hour=stats.get('cal_per_hour', '--'),
+                                protein_per_hour=stats.get('protein_per_hour', '--'),
+                                kcal_per_fiber=stats.get('kcal_per_fiber', '--'),
                                 time_since_last_ate=time_since_last_ate,
                                 js_debug=app.config.get('JS_DEBUG', False))
+
 
 @app.route('/edit-foods', methods=['GET', 'POST'])
 def edit_foods():
@@ -1094,6 +1136,7 @@ def edit_foods():
         except Exception as e:
             return jsonify({'success': False, 'error': f'Failed to save file: {str(e)}'}), 500
 
+
 @app.route('/log', methods=['POST'])
 def log_food():
     try:
@@ -1130,6 +1173,7 @@ def log_food():
         traceback.print_exc()
         raise
 
+
 @app.route('/delete-entry', methods=['POST'])
 def delete_entry():
     """Delete a food entry from today's log by index"""
@@ -1162,6 +1206,7 @@ def delete_entry():
         import traceback
         traceback.print_exc()
         raise
+
 
 @app.route('/api/notes')
 def api_notes():
@@ -1212,6 +1257,7 @@ def api_notes():
     
     return jsonify(result)
 
+
 @app.route('/api/foods')
 def api_foods():
     """API endpoint to get all foods as JSON"""
@@ -1246,6 +1292,7 @@ def api_foods():
             foods.append(food_entry)
     
     return jsonify({'foods': foods})
+
 
 @app.route('/api/foods/search')
 def api_foods_search():
@@ -1291,6 +1338,7 @@ def api_foods_search():
     
     return jsonify({'foods': foods, 'query': query})
 
+
 @app.route('/api/foods/<pad_key>/<food_key>')
 def api_foods_get(pad_key, food_key):
     """API endpoint to get specific food"""
@@ -1317,6 +1365,7 @@ def api_foods_get(pad_key, food_key):
         return jsonify({'food': food_entry})
     except:
         return jsonify({'error': 'Food not found'}), 404
+
 
 @app.route('/api/foods', methods=['POST'])
 def api_foods_add():
@@ -1421,13 +1470,15 @@ def api_foods_add():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error saving config: {str(e)}'}), 500
 
+
 # Register polling and styles routes
 register_polling_routes(app)
 register_styles_routes(app)
 register_notes_routes(app)
+register_calories_routes(app)
+
 
 # --- MAIN ---
-
 def main():
     parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')
@@ -1445,6 +1496,7 @@ def main():
     app.config['JS_DEBUG'] = args.js_debug
     
     app.run(debug=args.debug, host=args.host, port=args.port, threaded=True)
+
 
 if __name__ == '__main__':
     main()
