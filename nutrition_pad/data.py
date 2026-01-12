@@ -226,14 +226,20 @@ def calculate_nutrition_stats():
     }
 
 def calculate_time_since_last_ate():
-    """Calculate time since last food entry"""
+    """Calculate time since last food entry (excludes drinks/items under 20 kcal)"""
     entries = load_today_log()
     
     if not entries:
         return None
     
-    # Get the last entry's timestamp
-    last_entry = entries[-1]
+    # Filter to only "real food" (20+ kcal)
+    food_entries = [e for e in entries if e.get('calories', 0) >= 20]
+    
+    if not food_entries:
+        return None
+    
+    # Get the last food entry's timestamp
+    last_entry = food_entries[-1]
     timestamp_str = last_entry.get('timestamp')
     
     if not timestamp_str:

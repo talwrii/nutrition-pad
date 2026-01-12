@@ -93,19 +93,28 @@ HTML_INDEX = """
         }
         
         .food-btn {
-            aspect-ratio: 1;
+            position: relative;
+            padding-bottom: 100%; /* Square aspect ratio fallback */
+            height: 0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+        }
+        
+        .food-btn-inner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 16px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: 2px solid rgba(255, 255, 255, 0.2);
             text-align: center;
-            overflow: hidden;
-            position: relative;
         }
         
         .food-btn:hover {
@@ -285,10 +294,12 @@ HTML_INDEX = """
             {% for food_key, food in current_pad_data.foods.items() %}
             <div class="food-btn {% if food.get('type') == 'unit' %}unit-food{% else %}amount-food{% endif %}" 
                  onclick="logFood('{{ current_pad }}', '{{ food_key }}')">
-                <div class="food-type-indicator">
-                    {% if food.get('type') == 'unit' %}U{% else %}{{ current_amount }}g{% endif %}
+                <div class="food-btn-inner">
+                    <div class="food-type-indicator">
+                        {% if food.get('type') == 'unit' %}U{% else %}{{ current_amount }}g{% endif %}
+                    </div>
+                    <div class="food-name">{{ food.name }}</div>
                 </div>
-                <div class="food-name">{{ food.name }}</div>
             </div>
             {% endfor %}
         {% else %}
