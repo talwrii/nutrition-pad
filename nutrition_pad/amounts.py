@@ -130,8 +130,8 @@ AMOUNTS_TAB_HTML = """
 """
 
 # JavaScript for amounts functionality - simplified for older browsers
+# NOTE: No <script> tags here - this is injected into an existing script block
 AMOUNTS_JAVASCRIPT = """
-<script>
 (function() {
     var currentAmount = parseInt('{{ current_amount }}') || 100;
     
@@ -197,13 +197,12 @@ AMOUNTS_JAVASCRIPT = """
         initializePresets();
     }
 })();
-</script>
 """
 
 def render_amounts_tab(current_amount):
     """Render the amounts tab HTML"""
     return AMOUNTS_TAB_HTML.replace('{{ current_amount }}', str(current_amount))
 
-def get_amounts_javascript():
+def get_amounts_javascript(current_amount=100):
     """Get the amounts tab JavaScript"""
-    return AMOUNTS_JAVASCRIPT
+    return AMOUNTS_JAVASCRIPT.replace('{{ current_amount }}', str(current_amount))
