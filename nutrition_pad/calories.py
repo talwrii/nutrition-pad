@@ -13,7 +13,40 @@ HTML_CALORIES = """
     <title>Calories Timeline</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        .header-icons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .settings-cog, .food-link, .notes-link {
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            padding: 10px;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .settings-cog:hover {
+            color: #ffd93d;
+            transform: rotate(90deg) scale(1.1);
+        }
+        .food-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
+        }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+        }
+        
         .timeline-container {
             max-width: 900px;
             margin: 20px auto;
@@ -205,6 +238,11 @@ HTML_CALORIES = """
 </head>
 <body>
     <div class="header">
+        <div class="header-icons">
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
+        </div>
         <h1>Calories Timeline</h1>
     </div>
     

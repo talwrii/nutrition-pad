@@ -39,14 +39,12 @@ HTML_INDEX = """
     <style>
         /* App-specific styles that may change frequently */
         .header-icons {
-            position: absolute;
-            top: 20px;
-            right: 20px;
             display: flex;
+            justify-content: center;
             gap: 15px;
-            z-index: 10;
+            margin-bottom: 10px;
         }
-        .settings-cog, .notes-link, .amounts-link {
+        .settings-cog, .notes-link, .amounts-link, .food-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -75,6 +73,10 @@ HTML_INDEX = """
             transform: scale(1.1);
             text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
         }
+        .food-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
+        }
         
         .food-btn.amount-food {
             border-color: rgba(255, 255, 255, 0.2);
@@ -84,23 +86,24 @@ HTML_INDEX = """
             border-color: rgba(255, 255, 255, 0.3);
         }
         
-        /* Square grid layout for food buttons */
+        /* Square grid layout for food buttons - float for max compatibility */
         .food-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            padding: 15px;
+            overflow: hidden;
+            padding: 10px;
         }
         
         .food-btn {
+            float: left;
+            width: 30%;
+            margin: 1.5%;
+            padding-bottom: 30%;
             position: relative;
-            padding-bottom: 100%; /* Square aspect ratio fallback */
-            height: 0;
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s ease;
             border: 2px solid rgba(255, 255, 255, 0.2);
             overflow: hidden;
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
         }
         
         .food-btn-inner {
@@ -109,11 +112,19 @@ HTML_INDEX = """
             left: 0;
             right: 0;
             bottom: 0;
+            display: -webkit-box;
+            display: -webkit-flex;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-flex-direction: column;
             flex-direction: column;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
             align-items: center;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
             justify-content: center;
-            padding: 16px;
+            padding: 10px;
             text-align: center;
         }
         
@@ -158,11 +169,6 @@ HTML_INDEX = """
         }
         
         @media (max-width: 480px) {
-            .food-grid {
-                grid-template-columns: repeat(3, 1fr);
-                gap: 8px;
-                padding: 10px;
-            }
             .food-btn .food-name {
                 font-size: 1.8em;
             }
@@ -264,12 +270,13 @@ HTML_INDEX = """
 </head>
 <body>
     <div class="header">
-        <h1>Food Pads</h1>
         <div class="header-icons">
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
             <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
+        <h1>Food Pads</h1>
         <div class="current-amount">{{ current_amount }}g</div>
         <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
@@ -330,14 +337,12 @@ HTML_TODAY = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .header-icons {
-            position: absolute;
-            top: 20px;
-            right: 20px;
             display: flex;
+            justify-content: center;
             gap: 15px;
-            z-index: 10;
+            margin-bottom: 10px;
         }
-        .settings-cog, .notes-link {
+        .settings-cog, .notes-link, .food-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -359,6 +364,10 @@ HTML_TODAY = """
             color: #ff6b6b;
             transform: scale(1.1);
             text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        .food-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
         }
         
         .log-item {
@@ -450,11 +459,12 @@ HTML_TODAY = """
 </head>
 <body>
     <div class="header">
-        <h1>Today's Log</h1>
         <div class="header-icons">
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
+        <h1>Today's Log</h1>
         <div class="total-protein">{{ total_protein }}g protein</div>
         <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
@@ -499,15 +509,13 @@ HTML_NUTRITION = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .header-icons {
-            position: absolute;
-            top: 20px;
-            right: 20px;
             display: flex;
+            justify-content: center;
             gap: 15px;
-            z-index: 10;
+            margin-bottom: 10px;
         }
         
-        .settings-cog, .home-link, .notes-link {
+        .settings-cog, .food-link, .notes-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -525,10 +533,9 @@ HTML_NUTRITION = """
             transform: rotate(90deg) scale(1.1);
             text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
         }
-        .home-link:hover {
-            color: #4ecdc4;
-            transform: scale(1.1);
-            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+        .food-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
         }
         .notes-link:hover {
             color: #ff6b6b;
@@ -672,12 +679,12 @@ HTML_NUTRITION = """
 </head>
 <body>
     <div class="header">
-        <h1>Nutrition Dashboard</h1>
         <div class="header-icons">
-            <a href="/" class="home-link" title="Food Pads"><i class="fas fa-utensils"></i></a>
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
+        <h1>Nutrition Dashboard</h1>
     </div>
     
     <div class="nutrition-stats">
@@ -739,6 +746,40 @@ HTML_FOOD_EDITOR = """
     <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        .header-icons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .settings-cog, .food-link, .notes-link {
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            padding: 10px;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .settings-cog:hover {
+            color: #ffd93d;
+            transform: rotate(90deg) scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        .food-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
+        }
+        .notes-link:hover {
+            color: #ff6b6b;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        
         .editor-container {
             max-width: 1000px;
             margin: 0 auto;
@@ -883,6 +924,11 @@ HTML_FOOD_EDITOR = """
 </head>
 <body>
     <div class="header">
+        <div class="header-icons">
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
+        </div>
         <h1>Food Configuration Editor</h1>
     </div>
     

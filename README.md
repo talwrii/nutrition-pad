@@ -15,4 +15,6 @@ You can then run `nutrition-pad --host 0.0.0.0 --port 5000` and connect to it fr
 I personally have three tablets to give me a number of of panes for recording food. And another tablet for display Updates are shared..
 
 
+## Hacking / Testing
+This is meant to work on old devices. I target the nexus 10 because these are cheap and readily available and have a large screen size. This assumes that emulate command can be run with andorid-emulate
 
