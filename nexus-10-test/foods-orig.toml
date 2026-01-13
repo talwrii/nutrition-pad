@@ -1,0 +1,31 @@
+[pads.proteins]
+name = "Proteins"
+color = "#e74c3c"
+
+[pads.proteins.foods.chicken]
+name = "Chicken"
+calories = 165
+protein = 31
+
+[pads.proteins.foods.eggs]
+name = "Eggs"
+calories = 155
+protein = 13
+
+[pads.vegetables]
+name = "Vegetables"
+color = "#27ae60"
+
+[pads.vegetables.foods.broccoli]
+name = "Broccoli"
+calories = 34
+protein = 3
+
+[pads.carbs]
+name = "Carbs"
+color = "#f39c12"
+
+[pads.carbs.foods.rice]
+name = "Rice"
+calories = 130
+protein = 3

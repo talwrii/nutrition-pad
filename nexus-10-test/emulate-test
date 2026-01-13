@@ -1,0 +1,32 @@
+#!/bin/bash
+cd "$(dirname "$0")"
+cleanup() {
+    echo "Shutting down..."
+    adb emu kill 2>/dev/null
+    kill $EMU_PID 2>/dev/null
+    kill $SERVER_PID 2>/dev/null
+    rm -r daily_logs
+}
+trap cleanup EXIT
+
+cp foods-orig.toml foods.toml
+
+# Start emulator
+android-emulator -no-window -no-audio -avd nexus10 -wipe-data &
+EMU_PID=$!
+
+adb wait-for-device
+adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+sleep 5
+
+# Start nutrition-pad
+nutrition-pad --host 127.0.0.1 --port 5001 &
+SERVER_PID=$!
+sleep 5
+
+adb shell am start -a android.intent.action.VIEW -d "http://10.0.2.2:5001/?pad=proteins"
+sleep 20
+
+adb exec-out screencap -p > nutrition_nexus10.png
+echo "Done: nutrition_nexus10.png"
+
