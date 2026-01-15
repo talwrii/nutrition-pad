@@ -3,14 +3,18 @@
 Command-line tool to show notes and unknown entries from nutrition-pad logs.
 Can read from local files or remote server.
 """
+
 import os
 import json
 import argparse
-from datetime import date, timedelta
+import random
+import string
+from datetime import date, datetime, timedelta
 
 LOGS_DIR = 'daily_logs'
 CONFIG_DIR = os.path.expanduser('~/.nutrition-pad')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'notes.config')
+
 
 def load_config():
     """Load server configuration"""
@@ -23,11 +27,13 @@ def load_config():
     except:
         return {'server': 'localhost:5000'}
 
+
 def save_config(config):
     """Save server configuration"""
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
+
 
 def fetch_from_server(server, days):
     """Fetch notes from remote server"""
@@ -42,6 +48,61 @@ def fetch_from_server(server, days):
         print(f"Error fetching from server: {e}")
         return None
 
+
+def backfill_ids_for_file(filepath):
+    """Add IDs to entries in a log file that don't have them. Returns True if modified."""
+    try:
+        with open(filepath, 'r') as f:
+            entries = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return False
+    
+    modified = False
+    for entry in entries:
+        if 'id' not in entry or not entry['id']:
+            # Generate ID based on timestamp if available
+            if entry.get('timestamp'):
+                try:
+                    ts = datetime.fromisoformat(entry['timestamp'])
+                    timestamp_part = ts.strftime('%Y%m%d%H%M%S')
+                except:
+                    timestamp_part = datetime.now().strftime('%Y%m%d%H%M%S')
+            else:
+                timestamp_part = datetime.now().strftime('%Y%m%d%H%M%S')
+            
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+            entry['id'] = f"{timestamp_part}{suffix}"
+            modified = True
+    
+    if modified:
+        with open(filepath, 'w') as f:
+            json.dump(entries, f, indent=2)
+    
+    return modified
+
+
+def backfill_all_ids():
+    """Backfill IDs for all historic log files."""
+    if not os.path.exists(LOGS_DIR):
+        print("No logs directory found")
+        return 0
+    
+    files_modified = 0
+    files_checked = 0
+    
+    for filename in sorted(os.listdir(LOGS_DIR)):
+        # Only process daily log files (YYYY-MM-DD.json), not notes files
+        if filename.endswith('.json') and not filename.endswith('_notes.json'):
+            filepath = os.path.join(LOGS_DIR, filename)
+            files_checked += 1
+            
+            if backfill_ids_for_file(filepath):
+                print(f"  ✓ Added IDs to: {filename}")
+                files_modified += 1
+    
+    return files_checked, files_modified
+
+
 def load_notes_local(date_str):
     """Load notes for a specific date from local files"""
     notes_file = os.path.join(LOGS_DIR, f'{date_str}_notes.json')
@@ -53,6 +114,7 @@ def load_notes_local(date_str):
             return json.load(f)
     except:
         return []
+
 
 def load_unknowns_local(date_str):
     """Load unknown entries for a specific date from local files"""
@@ -74,8 +136,9 @@ def load_unknowns_local(date_str):
     except:
         return []
 
+
 def display_data(dates_data):
-    """Display notes and unknowns"""
+    """Display notes and unknowns interspersed by time"""
     total_notes = 0
     total_unknowns = 0
     
@@ -105,26 +168,68 @@ def display_data(dates_data):
         print(f"{date_str} ({date_label})")
         print(f"{'='*60}")
         
-        if notes:
-            print(f"\n📝 NOTES ({len(notes)}):")
-            print("-" * 60)
-            for note in notes:
-                status = "✓ DONE" if note.get('done') else "⏳ TODO"
-                resolved = f" → {note.get('resolved_to')}" if note.get('resolved_to') else ""
-                print(f"  [{note.get('time', '??:??')}] {status} {note['text']}{resolved}")
-            total_notes += len(notes)
+        # Combine notes and unknowns into a single list with type markers
+        items = []
         
-        if unknowns:
-            print(f"\n❓ UNKNOWN ENTRIES ({len(unknowns)}):")
-            print("-" * 60)
-            for unk in unknowns:
-                resolved = f" → {unk.get('resolved_to')}" if unk.get('resolved_to') else ""
-                print(f"  [{unk.get('time', '??:??')}] {unk.get('name', 'Unknown')} ({unk.get('amount_display', '?')}){resolved}")
-            total_unknowns += len(unknowns)
+        for note in notes:
+            items.append({
+                'type': 'note',
+                'time': note.get('time', '??:??'),
+                'timestamp': note.get('timestamp', ''),
+                'id': note.get('id', ''),
+                'text': note.get('text', ''),
+                'done': note.get('done', False),
+                'resolved_to': note.get('resolved_to')
+            })
+        
+        for i, unk in enumerate(unknowns):
+            # Use stored ID if available, otherwise show missing
+            unk_id = unk.get('id', '(no id - run --backfill)')
+            items.append({
+                'type': 'unknown',
+                'time': unk.get('time', '??:??'),
+                'timestamp': unk.get('timestamp', ''),
+                'id': unk_id,
+                'name': unk.get('name', 'Unknown'),
+                'amount_display': unk.get('amount_display', '?'),
+                'index': unk.get('index', i),
+                'resolved_to': unk.get('resolved_to')
+            })
+        
+        # Sort by time
+        def sort_key(item):
+            time_str = item.get('time', '99:99')
+            try:
+                parts = time_str.split(':')
+                return int(parts[0]) * 60 + int(parts[1])
+            except:
+                return 9999
+        
+        items.sort(key=sort_key)
+        
+        # Display interspersed items
+        print(f"\n{len(notes)} notes, {len(unknowns)} unknowns:")
+        print("-" * 60)
+        
+        for item in items:
+            time_str = item.get('time', '??:??')
+            item_id = item.get('id', '')
+            resolved = f" → {item.get('resolved_to')}" if item.get('resolved_to') else ""
+            
+            if item['type'] == 'note':
+                status = "✓" if item.get('done') else "⏳"
+                print(f"  [{time_str}] 📝 {status} {item['text']}{resolved}")
+                print(f"           ID: {item_id}")
+                total_notes += 1
+            else:
+                print(f"  [{time_str}] ❓ {item['name']} ({item['amount_display']}){resolved}")
+                print(f"           ID: {item_id}")
+                total_unknowns += 1
     
     print(f"\n{'='*60}")
     print(f"TOTAL: {total_notes} notes, {total_unknowns} unknowns")
     print(f"{'='*60}\n")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -134,7 +239,15 @@ def main():
     parser.add_argument('--days', type=int, default=1, help='Number of days to show (default: 1 = today only)')
     parser.add_argument('--all', action='store_true', help='Show all available days')
     parser.add_argument('--local', action='store_true', help='Read from local files instead of server')
+    parser.add_argument('--backfill', action='store_true', help='Add IDs to historic entries that lack them')
     args = parser.parse_args()
+    
+    # Handle backfill command
+    if args.backfill:
+        print("Backfilling IDs for historic log entries...")
+        files_checked, files_modified = backfill_all_ids()
+        print(f"\nChecked {files_checked} files, modified {files_modified}")
+        return
     
     # Load config
     config = load_config()
@@ -202,6 +315,7 @@ def main():
         return
     
     display_data(dates_data)
+
 
 if __name__ == '__main__':
     main()

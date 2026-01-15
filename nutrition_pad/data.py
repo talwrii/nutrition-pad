@@ -6,6 +6,8 @@ Handles daily logs, configuration loading, and nutrition statistics.
 import json
 import os
 import toml
+import random
+import string
 from datetime import datetime, date
 
 CONFIG_FILE = 'foods.toml'
@@ -101,6 +103,14 @@ protein_per_gram = 0.021
 """
 
 
+def generate_entry_id():
+    """Generate a unique ID for a food entry"""
+    # Format: timestamp + 4 random chars for uniqueness
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+    return f"{timestamp}{suffix}"
+
+
 def ensure_logs_directory():
     """Create logs directory if it doesn't exist"""
     if not os.path.exists(LOGS_DIR):
@@ -137,6 +147,54 @@ def load_today_log():
         return []
 
 
+def backfill_entry_ids(entries):
+    """Add IDs to entries that don't have them. Returns True if any were added."""
+    modified = False
+    for entry in entries:
+        if 'id' not in entry or not entry['id']:
+            # Generate ID based on timestamp if available, otherwise use current time
+            if entry.get('timestamp'):
+                try:
+                    ts = datetime.fromisoformat(entry['timestamp'])
+                    timestamp_part = ts.strftime('%Y%m%d%H%M%S')
+                except:
+                    timestamp_part = datetime.now().strftime('%Y%m%d%H%M%S')
+            else:
+                timestamp_part = datetime.now().strftime('%Y%m%d%H%M%S')
+            
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+            entry['id'] = f"{timestamp_part}{suffix}"
+            modified = True
+    return modified
+
+
+def backfill_all_logs():
+    """Backfill IDs for all historic log files. Returns count of files modified."""
+    if not os.path.exists(LOGS_DIR):
+        return 0
+    
+    files_modified = 0
+    
+    for filename in os.listdir(LOGS_DIR):
+        # Only process daily log files (YYYY-MM-DD.json), not notes files
+        if filename.endswith('.json') and not filename.endswith('_notes.json'):
+            filepath = os.path.join(LOGS_DIR, filename)
+            try:
+                with open(filepath, 'r') as f:
+                    entries = json.load(f)
+                
+                if backfill_entry_ids(entries):
+                    with open(filepath, 'w') as f:
+                        json.dump(entries, f, indent=2)
+                    files_modified += 1
+                    
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Warning: Could not process {filename}: {e}")
+                continue
+    
+    return files_modified
+
+
 def save_food_entry(pad_key, food_key, food_data, amount=None):
     """Save a food entry to today's log with specified amount or unit"""
     log_file = get_today_log_file()
@@ -144,10 +202,16 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     # Load existing entries
     entries = load_today_log()
     
+    # Backfill IDs for any entries that don't have them
+    backfill_entry_ids(entries)
+    
     # Get current timestamp
     now = datetime.now()
     timestamp = now.isoformat()
     time_str = now.strftime('%H:%M')
+    
+    # Generate unique ID for this entry
+    entry_id = generate_entry_id()
     
     # Get scale factor (default 1.0)
     scale = food_data.get('scale', 1.0)
@@ -172,6 +236,7 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     
     # Create entry
     entry = {
+        'id': entry_id,
         'time': time_str,
         'pad': pad_key,
         'food': food_key,
