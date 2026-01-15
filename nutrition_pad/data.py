@@ -2,6 +2,7 @@
 Data module for nutrition pad application.
 Handles daily logs, configuration loading, and nutrition statistics.
 """
+
 import json
 import os
 import toml
@@ -9,6 +10,24 @@ from datetime import datetime, date
 
 CONFIG_FILE = 'foods.toml'
 LOGS_DIR = 'daily_logs'
+
+# Hardcoded unknown food definitions
+UNKNOWN_FOODS = {
+    'amount': {
+        'name': 'Unknown (amount)',
+        'type': 'amount',
+        'calories_per_gram': 0.0,
+        'protein_per_gram': 0.0,
+        'fiber_per_gram': 0.0
+    },
+    'unit': {
+        'name': 'Unknown (unit)',
+        'type': 'unit',
+        'calories': 0,
+        'protein': 0,
+        'fiber': 0
+    }
+}
 
 # --- DEFAULT CONFIG (unit vs amount foods) ---
 DEFAULT_CONFIG = """[pads.proteins]
@@ -81,10 +100,12 @@ calories_per_gram = 0.625
 protein_per_gram = 0.021
 """
 
+
 def ensure_logs_directory():
     """Create logs directory if it doesn't exist"""
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR)
+
 
 def load_config():
     """Load TOML config file, create default if not exists"""
@@ -95,10 +116,12 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         return toml.load(f)
 
+
 def get_today_log_file():
     """Get path to today's log file"""
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOGS_DIR, f'{today}.json')
+
 
 def load_today_log():
     """Load today's food log"""
@@ -112,6 +135,7 @@ def load_today_log():
             return json.load(f)
     except (json.JSONDecodeError, IOError):
         return []
+
 
 def save_food_entry(pad_key, food_key, food_data, amount=None):
     """Save a food entry to today's log with specified amount or unit"""
@@ -168,14 +192,17 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     
     return entry
 
+
 def calculate_daily_total():
     """Calculate total protein for today"""
     entries = load_today_log()
     return sum(entry.get('protein', 0) for entry in entries)
 
+
 def calculate_daily_item_count():
     """Calculate total items logged for today"""
     return len(load_today_log())
+
 
 def calculate_nutrition_stats():
     """Calculate comprehensive nutrition stats for today"""
@@ -225,6 +252,7 @@ def calculate_nutrition_stats():
         'kcal_per_fiber': f"{kcal_per_fiber:.0f}" if total_fiber > 0 else '--'
     }
 
+
 def calculate_time_since_last_ate():
     """Calculate time since last food entry (excludes drinks/items under 20 kcal)"""
     entries = load_today_log()
@@ -259,8 +287,13 @@ def calculate_time_since_last_ate():
     except (ValueError, TypeError):
         return None
 
+
 def validate_food_request(pad_key, food_key):
     """Validate that a pad and food key exist in the config"""
+    # Handle special unknown foods
+    if pad_key == '_unknown' and food_key in UNKNOWN_FOODS:
+        return True, UNKNOWN_FOODS[food_key]
+    
     config = load_config()
     
     if pad_key not in config.get('pads', {}):
@@ -271,10 +304,12 @@ def validate_food_request(pad_key, food_key):
     
     return True, config['pads'][pad_key]['foods'][food_key]
 
+
 def get_food_data(pad_key, food_key):
     """Get food data for a specific pad and food key"""
     config = load_config()
     return config['pads'][pad_key]['foods'][food_key]
+
 
 def get_all_pads():
     """Get all pads from the configuration"""

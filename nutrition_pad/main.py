@@ -309,6 +309,20 @@ HTML_INDEX = """
                 </div>
             </div>
             {% endfor %}
+            {% if is_first_pad %}
+            <div class="food-btn amount-food" onclick="logFood('_unknown', 'amount')">
+                <div class="food-btn-inner">
+                    <div class="food-type-indicator">{{ current_amount }}g</div>
+                    <div class="food-name">Unknown</div>
+                </div>
+            </div>
+            <div class="food-btn unit-food" onclick="logFood('_unknown', 'unit')">
+                <div class="food-btn-inner">
+                    <div class="food-type-indicator">U</div>
+                    <div class="food-name">Unknown</div>
+                </div>
+            </div>
+            {% endif %}
         {% else %}
             <div class="no-foods">No foods in this pad</div>
         {% endif %}
@@ -1051,6 +1065,7 @@ HTML_FOOD_EDITOR = """
 </html>
 """
 
+
 # --- ROUTES ---
 
 @app.route('/')
@@ -1093,10 +1108,19 @@ def index():
         amounts_content = render_amounts_tab(current_amount)
         amounts_javascript = get_amounts_javascript()
     
+    # Check if current pad is the first pad
+    first_pad_key = None
+    for pad_key in pads.keys():
+        if pad_key != 'amounts':
+            first_pad_key = pad_key
+            break
+    is_first_pad = (current_pad == first_pad_key)
+    
     return render_template_string(HTML_INDEX,
                                 pads=pads,
                                 current_pad=current_pad,
                                 current_pad_data=current_pad_data,
+                                is_first_pad=is_first_pad,
                                 daily_total=daily_total,
                                 item_count=item_count,
                                 avg_ratio=avg_ratio,
@@ -1536,6 +1560,7 @@ register_calories_routes(app)
 
 
 # --- MAIN ---
+
 def main():
     parser = argparse.ArgumentParser(description="Nutrition Pad")
     parser.add_argument('--host', default='localhost', help='Host IP')
