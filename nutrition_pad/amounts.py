@@ -16,6 +16,53 @@ AMOUNTS_TAB_HTML = """
             text-shadow: 0 0 30px rgba(255, 217, 61, 0.5);
         }
         
+        /* Slider styles */
+        .slider-container {
+            margin: 30px 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+            margin: 20px 0;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 217, 61, 0.4);
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 4px 15px rgba(255, 217, 61, 0.4);
+        }
+        
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        
         .amount-controls {
             display: flex;
             justify-content: center;
@@ -115,6 +162,21 @@ AMOUNTS_TAB_HTML = """
     
     <div class="amount-display" id="amount-display">{{ current_amount }}g</div>
     
+    <!-- Slider for amount selection -->
+    <div class="slider-container">
+        <input type="range" min="0" max="400" value="{{ current_amount }}"
+               class="slider" id="amountSlider"
+               onchange="setAmountTo(parseInt(this.value))"
+               oninput="updateSliderDisplay(this.value)">
+        <div class="slider-labels">
+            <span>0g</span>
+            <span>100g</span>
+            <span>200g</span>
+            <span>300g</span>
+            <span>400g</span>
+        </div>
+    </div>
+    
     <div class="amount-controls">
         <button class="amount-btn" onclick="adjustAmount(-25)">-25g</button>
         <button class="amount-btn" onclick="adjustAmount(-5)">-5g</button>
@@ -135,6 +197,14 @@ AMOUNTS_JAVASCRIPT = """
 (function() {
     var currentAmount = parseInt('{{ current_amount }}') || 100;
     
+    // Update amount display only (no server call)
+    function updateSliderDisplay(amount) {
+        var display = document.getElementById('amount-display');
+        if (display) {
+            display.textContent = amount + 'g';
+        }
+    }
+    
     // Update amount display
     function updateDisplay(amount) {
         var display = document.getElementById('amount-display');
@@ -152,6 +222,12 @@ AMOUNTS_JAVASCRIPT = """
         if (headerAmount) {
             headerAmount.textContent = amount + 'g';
         }
+        
+        // Update slider position
+        var slider = document.getElementById('amountSlider');
+        if (slider) {
+            slider.value = amount;
+        }
     }
     
     // Adjust amount by delta
@@ -166,6 +242,15 @@ AMOUNTS_JAVASCRIPT = """
     window.setAmountTo = function(amount) {
         currentAmount = amount;
         updateDisplay(currentAmount);
+    };
+    
+    // Update display during slider drag (without server call)
+    window.updateSliderDisplay = function(amount) {
+        var display = document.getElementById('amount-display');
+        if (display) {
+            display.textContent = amount + 'g';
+        }
+        currentAmount = parseInt(amount);
     };
     
     // Initialize preset buttons
