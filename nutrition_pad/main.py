@@ -1448,6 +1448,34 @@ def api_foods_get(pad_key, food_key):
         return jsonify({'error': 'Food not found'}), 404
 
 
+@app.route('/api/foods/by-id/<food_id>')
+def api_foods_get_by_id(food_id):
+    """API endpoint to get food by ID (searches all pads)"""
+    pads = get_all_pads()
+    for pad_key, pad_data in pads.items():
+        if pad_key == 'amounts':
+            continue
+        foods = pad_data.get('foods', {})
+        if food_id in foods:
+            food_data = foods[food_id]
+            food_entry = {
+                'pad_key': pad_key,
+                'food_key': food_id,
+                'name': food_data.get('name', food_id),
+                'type': food_data.get('type', 'amount')
+            }
+            if food_data.get('type') == 'unit':
+                food_entry['calories'] = food_data.get('calories', 0)
+                food_entry['protein'] = food_data.get('protein', 0)
+            else:
+                food_entry['calories_per_gram'] = food_data.get('calories_per_gram', 0)
+                food_entry['protein_per_gram'] = food_data.get('protein_per_gram', 0)
+            if food_data.get('scale') and food_data.get('scale') != 1.0:
+                food_entry['scale'] = food_data.get('scale')
+            return jsonify({'food': food_entry, 'pad_key': pad_key})
+    return jsonify({'error': 'Food not found'}), 404
+
+
 @app.route('/api/foods', methods=['POST'])
 def api_foods_add():
     """API endpoint to add a food"""
