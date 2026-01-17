@@ -191,13 +191,54 @@ AMOUNTS_TAB_HTML = """
 </div>
 """
 
-# JavaScript for amounts functionality - simplified for older browsers
+# JavaScript for amounts functionality - NOW WITH SERVER SYNC
 # NOTE: No <script> tags here - this is injected into an existing script block
 AMOUNTS_JAVASCRIPT = """
 (function() {
     var currentAmount = parseInt('{{ current_amount }}') || 100;
+    var syncTimeout = null;
+    var myNonce = null;
     
-    // Update amount display only (no server call)
+    // Generate a unique nonce for this client
+    function generateNonce() {
+        return Date.now().toString() + Math.random().toString(36).substr(2);
+    }
+    
+    // Sync amount to server
+    function syncToServer(amount) {
+        myNonce = generateNonce();
+        
+        // Set the nonce for the polling system to recognize our own updates
+        if (typeof setMyNonce === 'function') {
+            setMyNonce(myNonce);
+        }
+        
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/set-amount', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    console.log('[Amounts] Synced to server: ' + amount + 'g');
+                } else {
+                    console.error('[Amounts] Sync failed: ' + xhr.status);
+                }
+            }
+        };
+        xhr.send(JSON.stringify({amount: amount, nonce: myNonce}));
+    }
+    
+    // Debounced sync - wait for slider to stop moving before syncing
+    function debouncedSync(amount) {
+        if (syncTimeout) {
+            clearTimeout(syncTimeout);
+        }
+        syncTimeout = setTimeout(function() {
+            syncToServer(amount);
+        }, 100);  // 100ms debounce
+    }
+    
+    // Update amount display only (no server call) - for drag feedback
     function updateSliderDisplay(amount) {
         var display = document.getElementById('amount-display');
         if (display) {
@@ -205,16 +246,11 @@ AMOUNTS_JAVASCRIPT = """
         }
     }
     
-    // Update amount display
+    // Update amount display AND sync to server
     function updateDisplay(amount) {
         var display = document.getElementById('amount-display');
         if (display) {
             display.textContent = amount + 'g';
-        }
-        
-        // Update global amount in parent page
-        if (window.setAmount) {
-            window.setAmount(amount);
         }
         
         // Update header display
@@ -228,6 +264,9 @@ AMOUNTS_JAVASCRIPT = """
         if (slider) {
             slider.value = amount;
         }
+        
+        // SYNC TO SERVER - this was the missing piece!
+        debouncedSync(amount);
     }
     
     // Adjust amount by delta
@@ -244,13 +283,37 @@ AMOUNTS_JAVASCRIPT = """
         updateDisplay(currentAmount);
     };
     
-    // Update display during slider drag (without server call)
+    // Update display during slider drag (without server call for smooth UX)
     window.updateSliderDisplay = function(amount) {
         var display = document.getElementById('amount-display');
         if (display) {
             display.textContent = amount + 'g';
         }
         currentAmount = parseInt(amount);
+        // Debounced sync while dragging
+        debouncedSync(currentAmount);
+    };
+    
+    // Get current amount (for other scripts)
+    window.getCurrentAmount = function() {
+        return currentAmount;
+    };
+    
+    // Update amount from server (called by polling)
+    window.updateAmountDisplay = function(amount) {
+        currentAmount = parseInt(amount);
+        var display = document.getElementById('amount-display');
+        if (display) {
+            display.textContent = currentAmount + 'g';
+        }
+        var headerAmount = document.querySelector('.current-amount');
+        if (headerAmount) {
+            headerAmount.textContent = currentAmount + 'g';
+        }
+        var slider = document.getElementById('amountSlider');
+        if (slider) {
+            slider.value = currentAmount;
+        }
     };
     
     // Initialize preset buttons

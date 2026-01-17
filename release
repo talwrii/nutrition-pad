@@ -3,45 +3,60 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-# SSH ControlMaster setup
+LOGFILE=$(mktemp)
 CONTROL_PATH="/tmp/ssh-release-%r@%h:%p"
 
-echo "🔐 Establishing SSH connection to GitHub..."
-ssh -o ControlMaster=yes -o ControlPath="$CONTROL_PATH" -o ControlPersist=300 -fN git@github.com
+cleanup() {
+    ssh -o ControlPath="$CONTROL_PATH" -O exit git@github.com 2>/dev/null || true
+    rm -f "$LOGFILE"
+}
+trap cleanup EXIT
 
-# Use ControlMaster for git
+# Run everything quietly, capture output
+run_quiet() {
+    "$@" >> "$LOGFILE" 2>&1
+}
+
+# On error, dump log
+fail() {
+    echo ""
+    echo "═══════════════════════════════════════════════"
+    echo "  ❌ RELEASE FAILED"
+    echo "═══════════════════════════════════════════════"
+    cat "$LOGFILE"
+    exit 1
+}
+
+# SSH ControlMaster setup
+run_quiet ssh -o ControlMaster=yes -o ControlPath="$CONTROL_PATH" -o ControlPersist=300 -fN git@github.com || fail
 export GIT_SSH_COMMAND="ssh -o ControlPath=$CONTROL_PATH"
 
-# Fail if there are any modified files
+# Fail if uncommitted changes
 if ! git diff-index --quiet HEAD --; then
-    echo "Error: You have uncommitted changes to tracked files"
+    echo "Error: Uncommitted changes"
     git status --short
-    ssh -o ControlPath="$CONTROL_PATH" -O exit git@github.com 2>/dev/null || true
     exit 1
 fi
 
-git push
- 
+run_quiet git push || fail
+
 if [ -f pyproject.toml ]; then
     VERSION=$(cat pyproject.toml | toml2json | jq -rc '.project.version')
 else
-    VERSION=$(python3 setup.py --version)
+    VERSION=$(python3 setup.py --version 2>/dev/null)
 fi
 
-git tag "$VERSION"
-git push --tags
+run_quiet git tag "$VERSION" || fail
+run_quiet git push --tags || fail
 
 rm -rf dist *.egg-info build
 
 if [ -f pyproject.toml ]; then
-    python3 -m build
+    run_quiet python3 -m build || fail
 else
-    python3 setup.py sdist
+    run_quiet python3 setup.py sdist || fail
 fi
 
-twine upload -p $(cat token) dist/*
-
-# Close ControlMaster
-ssh -o ControlPath="$CONTROL_PATH" -O exit git@github.com 2>/dev/null || true
+run_quiet twine upload -p $(cat token) dist/* || fail
 
 echo "✅ Released version $VERSION"
