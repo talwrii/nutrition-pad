@@ -2,6 +2,7 @@
 """
 Main Flask application for nutrition-pad
 """
+
 import os
 import sys
 import json
@@ -132,7 +133,7 @@ MAIN_HTML = """
                     style="background: {{ food.color if food.color else '#667eea' }};"
                     onclick="logFood('{{ pad_key }}', '{{ food_key }}')">
                 <div class="food-name">{{ food.name }}</div>
-                <div class="food-nutrition">{{ food.protein_per_gram * 100 if food.type != 'unit' else food.protein }}g protein</div>
+                <div class="food-nutrition">{% if food.type == 'unit' %}{{ food.protein }}{% else %}{{ (food.protein_per_gram * 100)|round|int }}{% endif %}g protein</div>
             </button>
             {% endfor %}
         </div>
