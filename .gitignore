@@ -10,3 +10,4 @@ foods.toml
 
 .venv-test
 screenshots
+.venv-release

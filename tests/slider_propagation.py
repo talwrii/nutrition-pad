@@ -18,6 +18,7 @@ import sys
 import time
 import asyncio
 from pathlib import Path
+
 from playwright.async_api import async_playwright
 
 # Configuration
@@ -42,8 +43,8 @@ async def get_displayed_amount(page):
     # Try different selectors that might contain the amount
     selectors = [
         ".current-amount",
-        "[class*='amount']",
-        "text=/\\d+g/"
+        "#amount-display",
+        ".amount-display",
     ]
     
     for selector in selectors:
@@ -52,11 +53,11 @@ async def get_displayed_amount(page):
             if await element.count() > 0:
                 text = await element.text_content()
                 if text:
-                    # Extract number from text like "100g" or "Current: 100g"
+                    # Extract number from text like "100g" or "100.0g"
                     import re
-                    match = re.search(r'(\d+)', text)
+                    match = re.search(r'([\d.]+)', text)
                     if match:
-                        return int(match.group(1))
+                        return int(float(match.group(1)))
         except Exception:
             continue
     
@@ -73,8 +74,6 @@ async def get_slider_value(page):
 
 async def set_slider_value(page, value):
     """Set the slider to a specific value."""
-    slider = page.locator("input[type='range']").first
-    
     # Method 1: Direct value setting via JavaScript
     await page.evaluate(f"""
         const slider = document.querySelector("input[type='range']");
@@ -115,30 +114,32 @@ async def test_slider_propagation():
         context2 = await browser.new_context()
         
         page_amounts = await context1.new_page()
-        page_proteins = await context2.new_page()
+        page_food = await context2.new_page()
         
         try:
             # === Step 1: Navigate both pages ===
             print("1️⃣  Opening pages...")
             
+            # Amounts page
             await page_amounts.goto(f"{BASE_URL}/?pad=amounts")
-            await page_proteins.goto(f"{BASE_URL}/?pad=proteins")
+            # Food page - use root URL, will redirect to first configured pad
+            await page_food.goto(f"{BASE_URL}/")
             
             # Wait for pages to load
             await page_amounts.wait_for_load_state("networkidle")
-            await page_proteins.wait_for_load_state("networkidle")
+            await page_food.wait_for_load_state("networkidle")
             
             await screenshot(page_amounts, "01_amounts_initial")
-            await screenshot(page_proteins, "02_proteins_initial")
+            await screenshot(page_food, "02_food_initial")
             
             # === Step 2: Get initial values ===
             print("\n2️⃣  Reading initial values...")
             
             initial_slider = await get_slider_value(page_amounts)
-            initial_proteins_display = await get_displayed_amount(page_proteins)
+            initial_food_display = await get_displayed_amount(page_food)
             
             print(f"   Amounts page slider: {initial_slider}g")
-            print(f"   Proteins page display: {initial_proteins_display}g")
+            print(f"   Food page display: {initial_food_display}g")
             
             # === Step 3: Change the slider ===
             print("\n3️⃣  Moving slider...")
@@ -161,26 +162,26 @@ async def test_slider_propagation():
             print(f"   Slider now shows: {after_slide}g")
             
             # === Step 4: Wait for propagation ===
-            print("\n4️⃣  Waiting for propagation to proteins page...")
+            print("\n4️⃣  Waiting for propagation to food page...")
             
-            propagated = await wait_for_amount_change(page_proteins, new_value)
+            propagated = await wait_for_amount_change(page_food, new_value)
             
-            await screenshot(page_proteins, "04_proteins_after_propagation")
+            await screenshot(page_food, "04_food_after_propagation")
             
             # === Step 5: Check result ===
-            final_proteins_display = await get_displayed_amount(page_proteins)
-            print(f"   Proteins page now shows: {final_proteins_display}g")
+            final_food_display = await get_displayed_amount(page_food)
+            print(f"   Food page now shows: {final_food_display}g")
             
-            if propagated and final_proteins_display == new_value:
+            if propagated and final_food_display == new_value:
                 print("\n✅ SUCCESS: Slider change propagated correctly!")
                 return True
             else:
-                print(f"\n❌ FAILURE: Expected {new_value}g, got {final_proteins_display}g")
+                print(f"\n❌ FAILURE: Expected {new_value}g, got {final_food_display}g")
                 print(f"   Propagation detected: {propagated}")
                 
                 # Extra debugging screenshots
                 await screenshot(page_amounts, "FAIL_amounts_final")
-                await screenshot(page_proteins, "FAIL_proteins_final")
+                await screenshot(page_food, "FAIL_food_final")
                 
                 # Check if there's any network activity
                 print("\n   Debugging info:")
@@ -192,7 +193,7 @@ async def test_slider_propagation():
         except Exception as e:
             print(f"\n❌ ERROR: {e}")
             await screenshot(page_amounts, "ERROR_amounts")
-            await screenshot(page_proteins, "ERROR_proteins")
+            await screenshot(page_food, "ERROR_food")
             raise
             
         finally:
@@ -209,13 +210,13 @@ async def test_slider_multiple_values():
         context2 = await browser.new_context()
         
         page_amounts = await context1.new_page()
-        page_proteins = await context2.new_page()
+        page_food = await context2.new_page()
         
         try:
             await page_amounts.goto(f"{BASE_URL}/?pad=amounts")
-            await page_proteins.goto(f"{BASE_URL}/?pad=proteins")
+            await page_food.goto(f"{BASE_URL}/")
             await page_amounts.wait_for_load_state("networkidle")
-            await page_proteins.wait_for_load_state("networkidle")
+            await page_food.wait_for_load_state("networkidle")
             
             test_values = [50, 100, 150, 200, 75]
             results = []
@@ -225,14 +226,14 @@ async def test_slider_multiple_values():
                 await set_slider_value(page_amounts, value)
                 
                 # Wait a bit for propagation
-                propagated = await wait_for_amount_change(page_proteins, value)
-                actual = await get_displayed_amount(page_proteins)
+                propagated = await wait_for_amount_change(page_food, value)
+                actual = await get_displayed_amount(page_food)
                 
                 status = "✓" if propagated else "✗"
                 print(f"   {status} Expected {value}g, got {actual}g")
                 results.append(propagated)
                 
-                await screenshot(page_proteins, f"multi_{i+1}_{value}g")
+                await screenshot(page_food, f"multi_{i+1}_{value}g")
             
             passed = sum(results)
             print(f"\n   Results: {passed}/{len(test_values)} passed")
