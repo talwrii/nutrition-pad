@@ -102,19 +102,53 @@ calories_per_gram = 0.625
 protein_per_gram = 0.021
 """
 
-
 def generate_entry_id():
     """Generate a unique ID for a food entry"""
-    # Format: timestamp + 4 random chars for uniqueness
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
     return f"{timestamp}{suffix}"
-
 
 def ensure_logs_directory():
     """Create logs directory if it doesn't exist"""
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR)
+
+def validate_config(config):
+    """Validate that all foods have required fields"""
+    errors = []
+    
+    pads = config.get('pads', {})
+    for pad_key, pad_data in pads.items():
+        if pad_key == 'amounts':
+            continue
+        
+        foods = pad_data.get('foods', {})
+        for food_key, food_data in foods.items():
+            # Check type is specified
+            if 'type' not in food_data:
+                errors.append(f"[{pad_key}/{food_key}] Missing 'type' field (must be 'unit' or 'amount')")
+                continue
+            
+            food_type = food_data.get('type')
+            if food_type not in ('unit', 'amount'):
+                errors.append(f"[{pad_key}/{food_key}] Invalid type '{food_type}' (must be 'unit' or 'amount')")
+                continue
+            
+            # Check required fields for each type
+            if food_type == 'unit':
+                if 'calories' not in food_data:
+                    errors.append(f"[{pad_key}/{food_key}] Unit food missing 'calories'")
+                if 'protein' not in food_data:
+                    errors.append(f"[{pad_key}/{food_key}] Unit food missing 'protein'")
+            else:  # amount
+                if 'calories_per_gram' not in food_data:
+                    errors.append(f"[{pad_key}/{food_key}] Amount food missing 'calories_per_gram'")
+                if 'protein_per_gram' not in food_data:
+                    errors.append(f"[{pad_key}/{food_key}] Amount food missing 'protein_per_gram'")
+    
+    if errors:
+        error_msg = "Invalid foods.toml configuration:\n  " + "\n  ".join(errors)
+        raise ValueError(error_msg)
 
 
 def load_config():
@@ -124,14 +158,15 @@ def load_config():
             f.write(DEFAULT_CONFIG)
     
     with open(CONFIG_FILE, 'r') as f:
-        return toml.load(f)
-
+        config = toml.load(f)
+    
+    validate_config(config)
+    return config
 
 def get_today_log_file():
     """Get path to today's log file"""
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOGS_DIR, f'{today}.json')
-
 
 def load_today_log():
     """Load today's food log"""
@@ -146,13 +181,11 @@ def load_today_log():
     except (json.JSONDecodeError, IOError):
         return []
 
-
 def backfill_entry_ids(entries):
     """Add IDs to entries that don't have them. Returns True if any were added."""
     modified = False
     for entry in entries:
         if 'id' not in entry or not entry['id']:
-            # Generate ID based on timestamp if available, otherwise use current time
             if entry.get('timestamp'):
                 try:
                     ts = datetime.fromisoformat(entry['timestamp'])
@@ -167,7 +200,6 @@ def backfill_entry_ids(entries):
             modified = True
     return modified
 
-
 def backfill_all_logs():
     """Backfill IDs for all historic log files. Returns count of files modified."""
     if not os.path.exists(LOGS_DIR):
@@ -176,7 +208,6 @@ def backfill_all_logs():
     files_modified = 0
     
     for filename in os.listdir(LOGS_DIR):
-        # Only process daily log files (YYYY-MM-DD.json), not notes files
         if filename.endswith('.json') and not filename.endswith('_notes.json'):
             filepath = os.path.join(LOGS_DIR, filename)
             try:
@@ -194,47 +225,36 @@ def backfill_all_logs():
     
     return files_modified
 
-
 def save_food_entry(pad_key, food_key, food_data, amount=None):
     """Save a food entry to today's log with specified amount or unit"""
     log_file = get_today_log_file()
     
-    # Load existing entries
     entries = load_today_log()
-    
-    # Backfill IDs for any entries that don't have them
     backfill_entry_ids(entries)
     
-    # Get current timestamp
     now = datetime.now()
     timestamp = now.isoformat()
     time_str = now.strftime('%H:%M')
     
-    # Generate unique ID for this entry
     entry_id = generate_entry_id()
     
-    # Get scale factor (default 1.0)
     scale = food_data.get('scale', 1.0)
     
-    # Calculate nutrition based on food type
     if food_data.get('type') == 'unit':
-        # Unit food - fixed serving
         calories = food_data.get('calories', 0) * scale
         protein = food_data.get('protein', 0) * scale
         fiber = food_data.get('fiber', 0) * scale
         amount_display = "1 unit"
         entry_amount = 1
     else:
-        # Amount food - calculate from grams
         if amount is None:
-            amount = 100  # default to 100g
+            amount = 100
         calories = food_data.get('calories_per_gram', 0) * amount * scale
         protein = food_data.get('protein_per_gram', 0) * amount * scale
         fiber = food_data.get('fiber_per_gram', 0) * amount * scale
         amount_display = f"{amount}g"
         entry_amount = amount
     
-    # Create entry
     entry = {
         'id': entry_id,
         'time': time_str,
@@ -251,23 +271,19 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
     
     entries.append(entry)
     
-    # Save back to file
     with open(log_file, 'w') as f:
         json.dump(entries, f, indent=2)
     
     return entry
-
 
 def calculate_daily_total():
     """Calculate total protein for today"""
     entries = load_today_log()
     return sum(entry.get('protein', 0) for entry in entries)
 
-
 def calculate_daily_item_count():
     """Calculate total items logged for today"""
     return len(load_today_log())
-
 
 def calculate_nutrition_stats():
     """Calculate comprehensive nutrition stats for today"""
@@ -288,21 +304,16 @@ def calculate_nutrition_stats():
     total_protein = sum(entry.get('protein', 0) for entry in log)
     total_fiber = sum(entry.get('fiber', 0) for entry in log)
     
-    # Calculate kcal per gram of protein (lower is better for protein efficiency)
     avg_ratio = total_calories / total_protein if total_protein > 0 else 0
-    
-    # Calculate kcal per gram of fiber
     kcal_per_fiber = total_calories / total_fiber if total_fiber > 0 else 0
     
-    # Calculate hours since 5am
     now = datetime.now()
     five_am = now.replace(hour=5, minute=0, second=0, microsecond=0)
     if now < five_am:
-        # Before 5am, count from previous day's 5am
         five_am = five_am.replace(day=five_am.day - 1)
     
     hours_since_5am = (now - five_am).total_seconds() / 3600
-    hours_since_5am = max(hours_since_5am, 0.1)  # Avoid division by zero
+    hours_since_5am = max(hours_since_5am, 0.1)
     
     cal_per_hour = total_calories / hours_since_5am
     protein_per_hour = total_protein / hours_since_5am
@@ -317,7 +328,6 @@ def calculate_nutrition_stats():
         'kcal_per_fiber': f"{kcal_per_fiber:.0f}" if total_fiber > 0 else '--'
     }
 
-
 def calculate_time_since_last_ate():
     """Calculate time since last food entry (excludes drinks/items under 20 kcal)"""
     entries = load_today_log()
@@ -325,13 +335,11 @@ def calculate_time_since_last_ate():
     if not entries:
         return None
     
-    # Filter to only "real food" (20+ kcal)
     food_entries = [e for e in entries if e.get('calories', 0) >= 20]
     
     if not food_entries:
         return None
     
-    # Get the last food entry's timestamp
     last_entry = food_entries[-1]
     timestamp_str = last_entry.get('timestamp')
     
@@ -352,10 +360,8 @@ def calculate_time_since_last_ate():
     except (ValueError, TypeError):
         return None
 
-
 def validate_food_request(pad_key, food_key):
     """Validate that a pad and food key exist in the config"""
-    # Handle special unknown foods
     if pad_key == '_unknown' and food_key in UNKNOWN_FOODS:
         return True, UNKNOWN_FOODS[food_key]
     
@@ -369,12 +375,10 @@ def validate_food_request(pad_key, food_key):
     
     return True, config['pads'][pad_key]['foods'][food_key]
 
-
 def get_food_data(pad_key, food_key):
     """Get food data for a specific pad and food key"""
     config = load_config()
     return config['pads'][pad_key]['foods'][food_key]
-
 
 def get_all_pads():
     """Get all pads from the configuration"""

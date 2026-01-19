@@ -446,7 +446,14 @@ def api_resolve_unknown():
 
 def main():
     """Main entry point"""
+    from importlib.metadata import version as pkg_version
+    try:
+        ver = pkg_version('nutrition-pad')
+    except:
+        ver = 'dev'
+    
     parser = argparse.ArgumentParser(description='Nutrition Pad Server')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {ver}')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
     parser.add_argument('--port', type=int, default=5000, help='Port to bind to')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
