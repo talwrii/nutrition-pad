@@ -280,9 +280,17 @@ def cmd_get(args):
         if food.get('type') == 'unit':
             print(f"  Calories: {food.get('calories', 0)} per unit")
             print(f"  Protein:  {food.get('protein', 0)}g per unit")
+            if food.get('fat') is not None:
+                print(f"  Fat:      {food.get('fat')}g per unit")
+            if food.get('carbs') is not None:
+                print(f"  Carbs:    {food.get('carbs')}g per unit")
         else:
             print(f"  Calories: {food.get('calories_per_gram', 0)} per gram")
             print(f"  Protein:  {food.get('protein_per_gram', 0)}g per gram")
+            if food.get('fat_per_gram') is not None:
+                print(f"  Fat:      {food.get('fat_per_gram')}g per gram")
+            if food.get('carbs_per_gram') is not None:
+                print(f"  Carbs:    {food.get('carbs_per_gram')}g per gram")
 
         if food.get('scale') and food.get('scale') != 1.0:
             print(f"  Scale: {food.get('scale')}")
@@ -293,7 +301,8 @@ def cmd_get(args):
 def cmd_add(args):
     """Add food from stdin TOML"""
     # Read TOML from stdin
-    print("Enter TOML configuration (Ctrl+D when done):", file=sys.stderr)
+    if sys.stdin.isatty():
+        print("Enter TOML configuration (Ctrl+D when done):", file=sys.stderr)
     toml_content = sys.stdin.read()
 
     if not toml_content.strip():
@@ -308,27 +317,173 @@ def cmd_add(args):
         return 1
 
     if args.local:
-        print("Error: --local mode not supported for add (would overwrite entire config)", file=sys.stderr)
-        print("Use the server to add foods safely", file=sys.stderr)
+        # Local add
+        config = load_local_config()
+        if not config:
+            # Create new config
+            config = {'pads': {}}
+        
+        # Extract food from parsed TOML
+        if 'pads' not in parsed:
+            print("Error: TOML must contain [pads.pad_key.foods.food_key]", file=sys.stderr)
+            return 1
+        
+        # Find the pad and food
+        for pk, pad_data in parsed['pads'].items():
+            if 'foods' in pad_data:
+                for fk, food_data in pad_data['foods'].items():
+                    # Ensure pad exists
+                    if pk not in config['pads']:
+                        config['pads'][pk] = {'name': pk.capitalize(), 'foods': {}}
+                    if 'foods' not in config['pads'][pk]:
+                        config['pads'][pk]['foods'] = {}
+                    
+                    config['pads'][pk]['foods'][fk] = food_data
+                    
+                    # Save
+                    try:
+                        with open(CONFIG_FILE, 'w') as f:
+                            toml.dump(config, f)
+                        print(f"✅ Added {fk} to {pk}")
+                        return 0
+                    except Exception as e:
+                        print(f"Error saving: {e}", file=sys.stderr)
+                        return 1
+        
+        print("Error: Could not find food definition in TOML", file=sys.stderr)
         return 1
-
-    # Send to server
-    server_config = load_server_config()
-    server = server_config.get('server', 'localhost:5000')
-
-    result = post_to_server(server, '/api/foods', {'toml_content': toml_content})
-
-    if result is None:
-        return 1
-
-    if result.get('success'):
-        print(f"✅ Food added successfully!")
-        if result.get('pad_key') and result.get('food_key'):
-            print(f"   Path: {result['pad_key']}/{result['food_key']}")
-        return 0
     else:
-        print(f"❌ Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+        # Send to server
+        server_config = load_server_config()
+        server = server_config.get('server', 'localhost:5000')
+
+        result = post_to_server(server, '/api/foods', {'toml_content': toml_content})
+
+        if result is None:
+            return 1
+
+        if result.get('success'):
+            print(f"✅ Food added successfully!")
+            if result.get('pad_key') and result.get('food_key'):
+                print(f"   Path: {result['pad_key']}/{result['food_key']}")
+            return 0
+        else:
+            print(f"❌ Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            return 1
+
+def cmd_edit(args):
+    """Edit a food from stdin TOML"""
+    food_id = args.food_id
+    
+    # Read TOML from stdin
+    if sys.stdin.isatty():
+        print("Paste TOML (Ctrl+D when done):", file=sys.stderr)
+    toml_content = sys.stdin.read()
+    
+    if not toml_content.strip():
+        print("Error: No TOML content provided", file=sys.stderr)
         return 1
+    
+    # Parse TOML
+    try:
+        parsed = toml.loads(toml_content)
+    except Exception as e:
+        print(f"Error parsing TOML: {e}", file=sys.stderr)
+        return 1
+    
+    # Extract food data from parsed TOML
+    # Handle both [pads.x.foods.y] format and flat format
+    food_data = None
+    new_food_id = food_id
+    pad_key = None
+    
+    if 'pads' in parsed:
+        # Full TOML format: [pads.proteins.foods.egg]
+        for pk, pad_data in parsed.get('pads', {}).items():
+            for fk, fd in pad_data.get('foods', {}).items():
+                pad_key = pk
+                new_food_id = fk
+                food_data = dict(fd)  # Copy it
+                break
+            if food_data:
+                break
+    else:
+        # Flat format - just the food fields
+        food_data = dict(parsed)
+    
+    if not food_data:
+        print("Error: Could not parse food data from TOML", file=sys.stderr)
+        return 1
+    
+    # Remove metadata fields that shouldn't be saved
+    food_data.pop('pad_key', None)
+    food_data.pop('food_key', None)
+    
+    if args.local:
+        # Local edit
+        config = load_local_config()
+        if not config:
+            return 1
+        
+        # Find the food's current pad if not specified
+        if not pad_key:
+            for pk, pd in config.get('pads', {}).items():
+                if food_id in pd.get('foods', {}):
+                    pad_key = pk
+                    break
+        
+        if not pad_key:
+            print(f"Error: Food '{food_id}' not found", file=sys.stderr)
+            return 1
+        
+        # Update or rename
+        if new_food_id != food_id:
+            # Rename: delete old, add new
+            if food_id in config['pads'][pad_key]['foods']:
+                del config['pads'][pad_key]['foods'][food_id]
+        
+        config['pads'][pad_key]['foods'][new_food_id] = food_data
+        
+        # Save
+        try:
+            with open(CONFIG_FILE, 'w') as f:
+                toml.dump(config, f)
+            print(f"✅ Updated {new_food_id}")
+            return 0
+        except Exception as e:
+            print(f"Error saving: {e}", file=sys.stderr)
+            return 1
+    else:
+        # Server edit - construct full TOML and use add endpoint (which overwrites)
+        if not pad_key:
+            # Need to find current pad from server
+            server_config = load_server_config()
+            server = server_config.get('server', 'localhost:5000')
+            data = fetch_from_server(server, f'/api/foods/by-id/{food_id}')
+            if data and data.get('pad_key'):
+                pad_key = data['pad_key']
+            else:
+                print(f"Error: Food '{food_id}' not found on server", file=sys.stderr)
+                return 1
+        
+        # Build full TOML for the add endpoint
+        full_toml = f"[pads.{pad_key}.foods.{new_food_id}]\n"
+        for k, v in food_data.items():
+            if isinstance(v, str):
+                full_toml += f'{k} = "{v}"\n'
+            else:
+                full_toml += f'{k} = {v}\n'
+        
+        server_config = load_server_config()
+        server = server_config.get('server', 'localhost:5000')
+        result = post_to_server(server, '/api/foods', {'toml_content': full_toml})
+        
+        if result and result.get('success'):
+            print(f"✅ Updated {new_food_id}")
+            return 0
+        else:
+            print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            return 1
 
 def main():
     parser = argparse.ArgumentParser(description='Manage nutrition-pad foods')
@@ -351,6 +506,10 @@ def main():
     # Add command
     add_parser = subparsers.add_parser('add', help='Add food from stdin TOML')
 
+    # Edit command
+    edit_parser = subparsers.add_parser('edit', help='Edit food from stdin TOML')
+    edit_parser.add_argument('food_id', help='Food ID to edit')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -365,6 +524,8 @@ def main():
         return cmd_get(args)
     elif args.command == 'add':
         return cmd_add(args)
+    elif args.command == 'edit':
+        return cmd_edit(args)
     else:
         parser.print_help()
         return 1

@@ -23,3 +23,7 @@ I personally have three tablets to give me a number of of panes for recording fo
 ## Hacking / Testing
 This is meant to work on old devices. I target the nexus 10 because these are cheap and readily available and have a large screen size. This assumes that emulate command can be run with andorid-emulate
 
+
+## LLM usage
+This is good for LLM usage. An LLM can help you. See [[LLM use]]
+
