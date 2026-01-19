@@ -91,11 +91,44 @@ except Exception as e:
 
 # 3. Start test server
 echo "▶ Starting test server..."
+
+# Create test foods.toml
+cat > /tmp/test-foods.toml << 'EOF'
+[pads.proteins]
+name = "Proteins"
+color = "#e74c3c"
+
+[pads.proteins.foods.chicken]
+name = "Chicken"
+type = "amount"
+calories_per_gram = 1.65
+protein_per_gram = 0.31
+
+[pads.proteins.foods.eggs]
+name = "Eggs (2)"
+type = "unit"
+calories = 140
+protein = 12
+
+[pads.carbs]
+name = "Carbs"
+color = "#f39c12"
+
+[pads.carbs.foods.rice]
+name = "Rice"
+type = "amount"
+calories_per_gram = 1.30
+protein_per_gram = 0.027
+EOF
+
+cd /tmp
+cp test-foods.toml foods.toml
 python3 -c "
 from nutrition_pad.main import app
 app.run(host='127.0.0.1', port=$TEST_PORT, debug=False, use_reloader=False)
 " > /tmp/test-server.log 2>&1 &
 SERVER_PID=$!
+cd - > /dev/null
 
 # Wait for server to start
 for i in {1..20}; do
