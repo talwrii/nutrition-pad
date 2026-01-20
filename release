@@ -155,6 +155,17 @@ else
     echo "⚠️  No Playwright tests found, skipping"
 fi
 
+# 5. Run CLI regression tests
+echo "▶ Running CLI regression tests..."
+if [ -f tests/test_nutrition_food_cli.py ]; then
+    python3 tests/test_nutrition_food_cli.py || {
+        echo "❌ CLI tests failed"
+        exit 1
+    }
+else
+    echo "⚠️  No CLI tests found, skipping"
+fi
+
 # Stop test server
 echo "▶ Stopping test server..."
 kill $SERVER_PID 2>/dev/null || true
