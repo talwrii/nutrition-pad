@@ -3,45 +3,208 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-# SSH ControlMaster setup
+LOGFILE=$(mktemp)
 CONTROL_PATH="/tmp/ssh-release-%r@%h:%p"
+TEST_PORT=5099
+SERVER_PID=""
+VENV_DIR=".venv-release"
 
-echo "🔐 Establishing SSH connection to GitHub..."
-ssh -o ControlMaster=yes -o ControlPath="$CONTROL_PATH" -o ControlPersist=300 -fN git@github.com
-
-# Use ControlMaster for git
-export GIT_SSH_COMMAND="ssh -o ControlPath=$CONTROL_PATH"
-
-# Fail if there are any modified files
-if ! git diff-index --quiet HEAD --; then
-    echo "Error: You have uncommitted changes to tracked files"
-    git status --short
+cleanup() {
+    [ -n "$SERVER_PID" ] && kill $SERVER_PID 2>/dev/null || true
     ssh -o ControlPath="$CONTROL_PATH" -O exit git@github.com 2>/dev/null || true
-    exit 1
-fi
+    rm -f "$LOGFILE"
+}
+trap cleanup EXIT
 
-git push
- 
+# Run everything quietly, capture output
+run_quiet() {
+    "$@" >> "$LOGFILE" 2>&1
+}
+
+# On error, dump log
+fail() {
+    echo ""
+    echo "═══════════════════════════════════════════════"
+    echo "  ❌ RELEASE FAILED"
+    echo "═══════════════════════════════════════════════"
+    cat "$LOGFILE"
+    exit 1
+}
+
+echo "═══════════════════════════════════════════════"
+echo "  RELEASE WITH TESTS"
+echo "═══════════════════════════════════════════════"
+
+# Get version
 if [ -f pyproject.toml ]; then
     VERSION=$(cat pyproject.toml | toml2json | jq -rc '.project.version')
 else
-    VERSION=$(python3 setup.py --version)
+    VERSION=$(python3 setup.py --version 2>/dev/null)
 fi
+echo "Version: $VERSION"
+echo ""
 
-git tag "$VERSION"
-git push --tags
+# Setup venv if needed
+setup_venv() {
+    echo "▶ Setting up venv..."
+    python3 -m venv "$VENV_DIR"
+    source "$VENV_DIR/bin/activate"
+    pip install --upgrade pip -q
+    pip install -e . -q
+    pip install playwright twine build -q
+    playwright install chromium 2>/dev/null || true
+    echo "  ✓ Venv ready"
+}
 
-rm -rf dist *.egg-info build
-
-if [ -f pyproject.toml ]; then
-    python3 -m build
+if [ ! -d "$VENV_DIR" ]; then
+    setup_venv
 else
-    python3 setup.py sdist
+    source "$VENV_DIR/bin/activate"
+    # Reinstall package to pick up changes
+    pip install -e . -q 2>/dev/null
 fi
 
-twine upload -p $(cat token) dist/*
+# 1. Syntax check
+echo "▶ Syntax check..."
+python3 -m py_compile nutrition_pad/*.py || {
+    echo "❌ Syntax errors found"
+    exit 1
+}
+echo "  ✓ OK"
 
-# Close ControlMaster
-ssh -o ControlPath="$CONTROL_PATH" -O exit git@github.com 2>/dev/null || true
+# 2. Import test
+echo "▶ Import test..."
+python3 -c "
+import sys
+try:
+    from nutrition_pad.main import app, main
+    from nutrition_pad.data import load_config
+    from nutrition_pad.polling import register_polling_routes
+    print('  ✓ All imports successful')
+except Exception as e:
+    print(f'  ✗ Import failed: {e}', file=sys.stderr)
+    sys.exit(1)
+" || {
+    echo "❌ Import test failed"
+    exit 1
+}
 
-echo "✅ Released version $VERSION"
+# 3. Start test server
+echo "▶ Starting test server..."
+
+# Create test foods.toml
+cat > /tmp/test-foods.toml << 'EOF'
+[pads.proteins]
+name = "Proteins"
+color = "#e74c3c"
+
+[pads.proteins.foods.chicken]
+name = "Chicken"
+type = "amount"
+calories_per_gram = 1.65
+protein_per_gram = 0.31
+
+[pads.proteins.foods.eggs]
+name = "Eggs (2)"
+type = "unit"
+calories = 140
+protein = 12
+
+[pads.carbs]
+name = "Carbs"
+color = "#f39c12"
+
+[pads.carbs.foods.rice]
+name = "Rice"
+type = "amount"
+calories_per_gram = 1.30
+protein_per_gram = 0.027
+EOF
+
+cd /tmp
+cp test-foods.toml foods.toml
+python3 -c "
+from nutrition_pad.main import app
+app.run(host='127.0.0.1', port=$TEST_PORT, debug=False, use_reloader=False)
+" > /tmp/test-server.log 2>&1 &
+SERVER_PID=$!
+cd - > /dev/null
+
+# Wait for server to start
+for i in {1..20}; do
+    curl -s "http://127.0.0.1:$TEST_PORT/" > /dev/null 2>&1 && break
+    sleep 0.3
+done
+
+if ! curl -s "http://127.0.0.1:$TEST_PORT/" > /dev/null 2>&1; then
+    echo "  ❌ Test server failed to start"
+    cat /tmp/test-server.log
+    exit 1
+fi
+echo "  ✓ Server running on port $TEST_PORT"
+
+# 4. Run Playwright tests if they exist
+if [ -f tests/slider_propagation.py ]; then
+    echo "▶ Running Playwright tests..."
+    python3 tests/slider_propagation.py "http://127.0.0.1:$TEST_PORT" || {
+        echo "❌ Tests failed"
+        exit 1
+    }
+    echo "  ✓ Tests passed"
+else
+    echo "⚠️  No Playwright tests found, skipping"
+fi
+
+# Stop test server
+echo "▶ Stopping test server..."
+kill $SERVER_PID 2>/dev/null || true
+SERVER_PID=""
+echo "  ✓ Server stopped"
+
+echo ""
+echo "═══════════════════════════════════════════════"
+echo "  ALL TESTS PASSED - PROCEEDING WITH RELEASE"
+echo "═══════════════════════════════════════════════"
+echo ""
+
+# 5. SSH ControlMaster setup
+run_quiet ssh -o ControlMaster=yes -o ControlPath="$CONTROL_PATH" -o ControlPersist=300 -fN git@github.com || fail
+export GIT_SSH_COMMAND="ssh -o ControlPath=$CONTROL_PATH"
+
+# 6. Check for uncommitted changes
+if ! git diff-index --quiet HEAD --; then
+    echo "Error: Uncommitted changes"
+    git status --short
+    exit 1
+fi
+
+# 7. Push to git
+echo "▶ Pushing to git..."
+run_quiet git push || fail
+echo "  ✓ Pushed"
+
+# 8. Tag version
+echo "▶ Tagging version $VERSION..."
+run_quiet git tag "$VERSION" || fail
+run_quiet git push --tags || fail
+echo "  ✓ Tagged"
+
+# 9. Build package
+echo "▶ Building package..."
+rm -rf dist *.egg-info build
+if [ -f pyproject.toml ]; then
+    run_quiet python3 -m build || fail
+else
+    run_quiet python3 setup.py sdist || fail
+fi
+echo "  ✓ Built"
+
+# 10. Upload to PyPI
+echo "▶ Uploading to PyPI..."
+run_quiet twine upload -p $(cat token) dist/* || fail
+echo "  ✓ Uploaded"
+
+echo ""
+echo "═══════════════════════════════════════════════"
+echo "  ✅ RELEASED VERSION $VERSION"
+echo "═══════════════════════════════════════════════"
