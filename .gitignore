@@ -8,3 +8,6 @@ deploy
 foods.toml
 *.backup
 
+screenshots
+.venv-release
+.venv-test
