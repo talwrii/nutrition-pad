@@ -659,19 +659,36 @@ HTML_NUTRITION = """
             };
             xhr.send();
         }
+        var pageLoadTime = new Date(); // Client time when page loaded
+        var serverTimeAtLoad = null; // Server time when page loaded
+
         function updateTimeSinceAte() {
             var timeEl = document.getElementById('time-since-ate');
             if (!timeEl) return;
+
             var lastMealTimestamp = timeEl.getAttribute('data-last-meal-timestamp');
+            var serverTimeStr = timeEl.getAttribute('data-server-time');
+
             if (!lastMealTimestamp) {
                 timeEl.textContent = '--';
                 return;
             }
+
             try {
+                // Initialize server time reference on first call
+                if (serverTimeAtLoad === null && serverTimeStr) {
+                    serverTimeAtLoad = new Date(serverTimeStr);
+                }
+
                 var lastMealTime = new Date(lastMealTimestamp);
-                var now = new Date();
-                var diffMs = now - lastMealTime;
+
+                // Calculate time difference using server time as reference
+                var elapsedSincePageLoad = new Date() - pageLoadTime; // How long since page loaded (client clock)
+                var serverNow = new Date(serverTimeAtLoad.getTime() + elapsedSincePageLoad); // Estimate current server time
+
+                var diffMs = serverNow - lastMealTime;
                 var diffMinutes = Math.floor(diffMs / (1000 * 60));
+
                 if (diffMinutes < 60) {
                     timeEl.textContent = diffMinutes + 'm';
                 } else {
@@ -686,8 +703,8 @@ HTML_NUTRITION = """
         window.onload = function() {
             simplePoll();
             updateTimeSinceAte();
-            // Update time display every 5 minutes (300000 ms)
-            setInterval(updateTimeSinceAte, 300000);
+            // Update time display every 30 seconds for accuracy
+            setInterval(updateTimeSinceAte, 30000);
         };
     </script>
 </head>
@@ -718,7 +735,9 @@ HTML_NUTRITION = """
                 <div class="stat-label">Fiber</div>
             </div>
             <div class="stat-card">
-                <div id="time-since-ate" class="stat-value time-since" data-last-meal-timestamp="{{ time_since_last_ate.timestamp if time_since_last_ate else '' }}">
+                <div id="time-since-ate" class="stat-value time-since"
+                     data-last-meal-timestamp="{{ time_since_last_ate.timestamp if time_since_last_ate else '' }}"
+                     data-server-time="{{ server_time }}">
                     {% if time_since_last_ate is not none %}
                         {% if time_since_last_ate.minutes < 60 %}
                             {{ time_since_last_ate.minutes }}m
@@ -1151,7 +1170,10 @@ def nutrition_dashboard():
     log_entries = load_today_log()
     stats = calculate_nutrition_stats()
     time_since_last_ate = calculate_time_since_last_ate()
-    
+
+    # Send server's current time for accurate client-side calculations
+    server_time = datetime.now().isoformat()
+
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
@@ -1162,6 +1184,7 @@ def nutrition_dashboard():
                                 protein_per_hour=stats.get('protein_per_hour', '--'),
                                 kcal_per_fiber=stats.get('kcal_per_fiber', '--'),
                                 time_since_last_ate=time_since_last_ate,
+                                server_time=server_time,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 
