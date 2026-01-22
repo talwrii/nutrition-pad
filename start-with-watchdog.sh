@@ -10,6 +10,17 @@ WATCHDOG_LOG="/tmp/nutrition-pad-watchdog.log"
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# Activate virtual environment
+if [ -d "$SCRIPT_DIR/.venv-release" ]; then
+    source "$SCRIPT_DIR/.venv-release/bin/activate"
+    echo "Using virtual environment: .venv-release"
+elif [ -d "$SCRIPT_DIR/.venv" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate"
+    echo "Using virtual environment: .venv"
+else
+    echo "Warning: No virtual environment found, using system Python"
+fi
+
 echo "Starting Nutrition Pad with watchdog..."
 echo "Host: $HOST"
 echo "Port: $PORT"
