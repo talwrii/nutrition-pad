@@ -265,6 +265,7 @@ HTML_INDEX = """
                 }
             }
             startLongPolling();
+            startHeartbeat();
         };
     </script>
 </head>
@@ -1714,17 +1715,34 @@ def main():
     parser.add_argument('--port', type=int, default=5001, help='Port')
     parser.add_argument('--debug', action='store_true', help='Debug mode')
     parser.add_argument('--js-debug', action='store_true', help='Enable JavaScript debugging')
+    parser.add_argument('--pidfile', default='/tmp/nutrition-pad.pid', help='PID file location')
     args = parser.parse_args()
-    
+
+    # Write PID file for watchdog
+    try:
+        with open(args.pidfile, 'w') as f:
+            f.write(str(os.getpid()))
+        print("PID file written to: {}".format(args.pidfile))
+    except Exception as e:
+        print("Warning: Could not write PID file: {}".format(e))
+
     print("Starting Nutrition Pad on http://{}:{}".format(args.host, args.port))
     print("Config file: {}".format(CONFIG_FILE))
     print("Logs directory: {}".format(LOGS_DIR))
     if args.js_debug:
         print("JavaScript debugging enabled")
-    
+
     app.config['JS_DEBUG'] = args.js_debug
-    
-    app.run(debug=args.debug, host=args.host, port=args.port, threaded=True)
+
+    try:
+        app.run(debug=args.debug, host=args.host, port=args.port, threaded=True)
+    finally:
+        # Clean up PID file on exit
+        try:
+            if os.path.exists(args.pidfile):
+                os.remove(args.pidfile)
+        except:
+            pass
 
 
 if __name__ == '__main__':

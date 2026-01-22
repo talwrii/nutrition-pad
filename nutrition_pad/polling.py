@@ -13,6 +13,10 @@ update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100.0  # Server-side amount state - ensure it's a float
 
+# Heartbeat tracking for watchdog
+last_heartbeat = time.time()
+heartbeat_lock = threading.Lock()
+
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
 var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
@@ -102,6 +106,20 @@ function poll() {
 
 function startLongPolling() {
     poll();
+}
+
+// Heartbeat functionality for watchdog
+function sendHeartbeat() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/heartbeat', true);
+    xhr.send();
+}
+
+function startHeartbeat() {
+    // Send heartbeat every 10 seconds
+    setInterval(sendHeartbeat, 10000);
+    // Send initial heartbeat immediately
+    sendHeartbeat();
 }
 
 // Expose functions that main.js might need
@@ -215,17 +233,33 @@ def get_polling_javascript():
     """Get the JavaScript code for polling functionality"""
     return POLLING_JAVASCRIPT
 
+def heartbeat():
+    """Heartbeat endpoint to track that the client is alive"""
+    global last_heartbeat
+    with heartbeat_lock:
+        last_heartbeat = time.time()
+    return jsonify({'status': 'ok', 'timestamp': last_heartbeat})
+
+def get_last_heartbeat():
+    """Get the last heartbeat timestamp (for watchdog monitoring)"""
+    with heartbeat_lock:
+        return last_heartbeat
+
 def register_polling_routes(app):
     """Register polling routes with the Flask app"""
-    
+
     @app.route('/poll-updates')
     def poll_updates_route():
         return poll_updates()
-    
+
     @app.route('/set-amount', methods=['POST'])
     def set_amount_route():
         return set_amount()
-    
+
+    @app.route('/heartbeat', methods=['GET', 'POST'])
+    def heartbeat_route():
+        return heartbeat()
+
     @app.route('/static/polling.js')
     def polling_js():
         return Response(POLLING_JAVASCRIPT, mimetype='application/javascript')
