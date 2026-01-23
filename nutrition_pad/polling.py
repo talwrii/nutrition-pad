@@ -13,10 +13,6 @@ update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100.0  # Server-side amount state - ensure it's a float
 
-# Heartbeat tracking for watchdog
-last_heartbeat = time.time()
-heartbeat_lock = threading.Lock()
-
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
 var lastUpdate = parseFloat(localStorage.getItem('lastUpdate') || '0');
@@ -24,6 +20,16 @@ var lastAmountUpdate = parseFloat(localStorage.getItem('lastAmountUpdate') || '0
 var isPolling = false;
 var myNonce = null;
 var debugMode = false; // Will be set by main template
+
+// Keepalive tracking - if no poll response for this long, refresh the page
+var lastPollResponse = Date.now();
+var KEEPALIVE_TIMEOUT = 60000; // 60 seconds
+
+// Server timestamp tracking - detect when server is stuck
+// We check if server_timestamp CHANGES between responses (not comparing to client time!)
+var lastServerTimestamp = 0;
+var stuckServerCount = 0;
+var MAX_STUCK_RESPONSES = 3; // If we get 3 responses with SAME server timestamp, server is stuck
 
 function debug(msg) {
     if (debugMode) {
@@ -38,6 +44,15 @@ function debug(msg) {
     }
 }
 
+function checkKeepalive() {
+    var timeSinceLastPoll = Date.now() - lastPollResponse;
+    if (timeSinceLastPoll > KEEPALIVE_TIMEOUT) {
+        debug('KEEPALIVE TIMEOUT! No poll response for ' + Math.round(timeSinceLastPoll/1000) + 's - refreshing page');
+        console.error('Polling stuck - no response for ' + Math.round(timeSinceLastPoll/1000) + ' seconds, forcing page refresh');
+        window.location.reload();
+    }
+}
+
 function generateNonce() {
     return Date.now().toString() + Math.random().toString(36).substr(2);
 }
@@ -47,25 +62,65 @@ function poll() {
         debug('Poll already running, skipping');
         return;
     }
-    
+
     isPolling = true;
     debug('Starting poll, lastUpdate: ' + lastUpdate + ', lastAmountUpdate: ' + lastAmountUpdate);
-    
+
     var xhr = new XMLHttpRequest();
     xhr.open('GET', '/poll-updates?since=' + lastUpdate + '&amount_since=' + lastAmountUpdate, true);
+
+    // Set timeout on the XHR - if it hangs for 45 seconds, refresh the page
+    xhr.timeout = 45000;
+
+    xhr.ontimeout = function() {
+        debug('Poll timeout - XHR hung for 45s, refreshing page');
+        console.error('Polling XHR timeout after 45s - forcing page refresh');
+        window.location.reload();
+    };
+
+    xhr.onerror = function() {
+        debug('Poll error - network issue, refreshing page');
+        console.error('Polling XHR error - forcing page refresh');
+        window.location.reload();
+    };
+
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             isPolling = false;
-            
+
+            // Update keepalive timestamp - we got a response (any response)
+            lastPollResponse = Date.now();
+
             if (xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    debug('Poll response: updated=' + data.updated + ', current_amount=' + data.current_amount);
-                    
+                    debug('Poll response: updated=' + data.updated + ', current_amount=' + data.current_amount +
+                          (data.server_timestamp ? ', server_ts=' + data.server_timestamp : ''));
+
+                    // Check if server is stuck by seeing if its timestamp changes between responses
+                    // (We're NOT comparing server time to client time - just checking if it advances)
+                    if (data.server_timestamp) {
+                        if (lastServerTimestamp > 0 && data.server_timestamp === lastServerTimestamp) {
+                            // Server sent the EXACT SAME timestamp as last time - it's stuck!
+                            stuckServerCount++;
+                            debug('Server timestamp unchanged: ' + data.server_timestamp + ' (' + stuckServerCount + '/' + MAX_STUCK_RESPONSES + ')');
+                            if (stuckServerCount >= MAX_STUCK_RESPONSES) {
+                                debug('Server appears stuck - same timestamp ' + MAX_STUCK_RESPONSES + ' times, refreshing page');
+                                console.error('Server stuck - returning same timestamp, forcing page refresh');
+                                window.location.reload();
+                                return;
+                            }
+                        } else {
+                            // Server timestamp changed (or first response) - server is alive
+                            lastServerTimestamp = data.server_timestamp;
+                            stuckServerCount = 0;
+                        }
+                    }
+
                     if (data.updated && data.timestamp > lastUpdate) {
                         lastUpdate = data.timestamp;
                         localStorage.setItem('lastUpdate', lastUpdate.toString());
-                        
+
                         if (data.nonce && myNonce && data.nonce === myNonce) {
                             debug('Skipping refresh - this was my update (nonce: ' + myNonce + ')');
                             myNonce = null;
@@ -75,19 +130,19 @@ function poll() {
                             if (itemCountEl) {
                                 itemCountEl.textContent = data.item_count + ' items logged today';
                             }
-                            
+
                             // Update amount display too
                             if (typeof updateAmountDisplay === 'function') {
                                 updateAmountDisplay(data.current_amount);
                             }
-                            
+
                             setTimeout(function() {
                                 window.location.reload();
                             }, 1000);
                             return;
                         }
                     }
-                    
+
                     if (!data.updated) {
                         debug('No updates');
                     }
@@ -97,7 +152,7 @@ function poll() {
             } else {
                 debug('HTTP error: ' + xhr.status);
             }
-            
+
             setTimeout(poll, 2000); // Poll every 2 seconds for immediate syncing
         }
     };
@@ -106,20 +161,8 @@ function poll() {
 
 function startLongPolling() {
     poll();
-}
-
-// Heartbeat functionality for watchdog
-function sendHeartbeat() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/heartbeat', true);
-    xhr.send();
-}
-
-function startHeartbeat() {
-    // Send heartbeat every 10 seconds
-    setInterval(sendHeartbeat, 10000);
-    // Send initial heartbeat immediately
-    sendHeartbeat();
+    // Check keepalive every 10 seconds
+    setInterval(checkKeepalive, 10000);
 }
 
 // Expose functions that main.js might need
@@ -171,7 +214,8 @@ def poll_updates():
                 'item_count': calculate_daily_item_count(),
                 'total_protein': calculate_daily_total(),
                 'nonce': current_nonce,
-                'current_amount': current_amount
+                'current_amount': current_amount,
+                'server_timestamp': time.time()
             }
             print(f"[DEBUG] Immediate response: {response}")
             return jsonify(response)
@@ -187,15 +231,18 @@ def poll_updates():
                     'item_count': calculate_daily_item_count(),
                     'total_protein': calculate_daily_total(),
                     'nonce': current_nonce,
-                    'current_amount': current_amount
+                    'current_amount': current_amount,
+                    'server_timestamp': time.time()
                 }
                 print(f"[DEBUG] Event response: {response}")
                 return jsonify(response)
     
+    # No update, but send server timestamp as keepalive
     return jsonify({
         'updated': False,
         'amount_changed': False,
-        'current_amount': current_amount
+        'current_amount': current_amount,
+        'server_timestamp': time.time()
     })
 
 def set_amount():
@@ -233,18 +280,6 @@ def get_polling_javascript():
     """Get the JavaScript code for polling functionality"""
     return POLLING_JAVASCRIPT
 
-def heartbeat():
-    """Heartbeat endpoint to track that the client is alive"""
-    global last_heartbeat
-    with heartbeat_lock:
-        last_heartbeat = time.time()
-    return jsonify({'status': 'ok', 'timestamp': last_heartbeat})
-
-def get_last_heartbeat():
-    """Get the last heartbeat timestamp (for watchdog monitoring)"""
-    with heartbeat_lock:
-        return last_heartbeat
-
 def register_polling_routes(app):
     """Register polling routes with the Flask app"""
 
@@ -255,10 +290,6 @@ def register_polling_routes(app):
     @app.route('/set-amount', methods=['POST'])
     def set_amount_route():
         return set_amount()
-
-    @app.route('/heartbeat', methods=['GET', 'POST'])
-    def heartbeat_route():
-        return heartbeat()
 
     @app.route('/static/polling.js')
     def polling_js():

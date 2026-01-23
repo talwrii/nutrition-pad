@@ -265,7 +265,6 @@ HTML_INDEX = """
                 }
             }
             startLongPolling();
-            startHeartbeat();
         };
     </script>
 </head>
