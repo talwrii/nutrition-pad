@@ -1125,7 +1125,7 @@ def index():
     amounts_javascript = ""
     if current_pad == 'amounts':
         amounts_content = render_amounts_tab(current_amount)
-        amounts_javascript = get_amounts_javascript()
+        amounts_javascript = get_amounts_javascript(current_amount)
     
     # Check if current pad is the first pad
     first_pad_key = None
