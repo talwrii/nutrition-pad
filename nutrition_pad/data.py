@@ -331,28 +331,37 @@ def calculate_nutrition_stats():
 def calculate_time_since_last_ate():
     """Calculate time since last food entry (excludes drinks/items under 20 kcal)"""
     entries = load_today_log()
-    
-    if not entries:
-        return None
-    
     food_entries = [e for e in entries if e.get('calories', 0) >= 20]
-    
+
+    # If no food today, check previous days
+    if not food_entries:
+        today = date.today()
+        for days_ago in range(1, 8):  # Check up to a week back
+            check_date = today - timedelta(days=days_ago)
+            log_file = os.path.join(LOGS_DIR, f'{check_date.strftime("%Y-%m-%d")}.json')
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r') as f:
+                        old_entries = json.load(f)
+                    food_entries = [e for e in old_entries if e.get('calories', 0) >= 20]
+                    if food_entries:
+                        break
+                except (json.JSONDecodeError, IOError):
+                    continue
+
     if not food_entries:
         return None
-    
+
     last_entry = food_entries[-1]
     timestamp_str = last_entry.get('timestamp')
-    
     if not timestamp_str:
         return None
-    
+
     try:
         last_time = datetime.fromisoformat(timestamp_str)
         now = datetime.now()
         delta = now - last_time
-        
         total_minutes = int(delta.total_seconds() / 60)
-        
         return {
             'minutes': total_minutes,
             'timestamp': timestamp_str
