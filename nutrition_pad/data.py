@@ -8,7 +8,7 @@ import os
 import toml
 import random
 import string
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 CONFIG_FILE = 'foods.toml'
 LOGS_DIR = 'daily_logs'
