@@ -4,13 +4,39 @@ color = "#e74c3c"
 
 [pads.proteins.foods.chicken]
 name = "Chicken"
-calories = 165
-protein = 31
+type = "amount"
+calories_per_gram = 1.65
+protein_per_gram = 0.31
 
 [pads.proteins.foods.eggs]
 name = "Eggs"
-calories = 155
-protein = 13
+type = "amount"
+calories_per_gram = 1.55
+protein_per_gram = 0.13
+
+[pads.proteins.foods.beef]
+name = "Beef"
+type = "amount"
+calories_per_gram = 2.50
+protein_per_gram = 0.26
+
+[pads.proteins.foods.fish]
+name = "Fish"
+type = "amount"
+calories_per_gram = 1.20
+protein_per_gram = 0.22
+
+[pads.proteins.foods.tofu]
+name = "Tofu"
+type = "amount"
+calories_per_gram = 0.76
+protein_per_gram = 0.08
+
+[pads.proteins.foods.beans]
+name = "Beans"
+type = "amount"
+calories_per_gram = 1.27
+protein_per_gram = 0.09
 
 [pads.vegetables]
 name = "Vegetables"
@@ -18,8 +44,9 @@ color = "#27ae60"
 
 [pads.vegetables.foods.broccoli]
 name = "Broccoli"
-calories = 34
-protein = 3
+type = "amount"
+calories_per_gram = 0.34
+protein_per_gram = 0.03
 
 [pads.carbs]
 name = "Carbs"
@@ -27,5 +54,6 @@ color = "#f39c12"
 
 [pads.carbs.foods.rice]
 name = "Rice"
-calories = 130
-protein = 3
+type = "amount"
+calories_per_gram = 1.30
+protein_per_gram = 0.03

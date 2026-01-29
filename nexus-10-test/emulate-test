@@ -25,7 +25,16 @@ SERVER_PID=$!
 sleep 5
 
 adb shell am start -a android.intent.action.VIEW -d "http://10.0.2.2:5001/?pad=proteins"
-sleep 20
+sleep 5
+
+# Rotate to portrait mode (1 = portrait, 90 degrees CCW)
+adb shell content insert --uri content://settings/system --bind name:s:user_rotation --bind value:i:1
+adb shell content insert --uri content://settings/system --bind name:s:accelerometer_rotation --bind value:i:0
+sleep 3
+
+# Force a screen refresh by toggling airplane mode or sending a broadcast
+adb shell am broadcast -a android.intent.action.CONFIGURATION_CHANGED
+sleep 15
 
 adb exec-out screencap -p > nutrition_nexus10.png
 echo "Done: nutrition_nexus10.png"
