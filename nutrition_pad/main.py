@@ -165,6 +165,18 @@ HTML_INDEX = """
                 font-size: 1.3em;
             }
         }
+        @media (min-width: 768px) {
+            .food-btn {
+                width: 17%;
+                padding-bottom: 17%;
+            }
+            .food-btn .food-name {
+                font-size: 1.6em;
+            }
+            .food-btn .food-type-indicator {
+                font-size: 1.2em;
+            }
+        }
         @media (max-width: 768px) {
             .header-icons {
                 top: 15px;
