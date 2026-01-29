@@ -329,9 +329,9 @@ def calculate_nutrition_stats():
     }
 
 def calculate_time_since_last_ate():
-    """Calculate time since last food entry (excludes drinks/items under 20 kcal)"""
+    """Calculate time since last food entry (excludes drinks/items under 20 kcal but includes unknowns)"""
     entries = load_today_log()
-    food_entries = [e for e in entries if e.get('calories', 0) >= 20]
+    food_entries = [e for e in entries if e.get('calories', 0) >= 20 or 'unknown' in e.get('food', '').lower() or 'unknown' in e.get('name', '').lower()]
 
     # If no food today, check previous days
     if not food_entries:
@@ -343,7 +343,7 @@ def calculate_time_since_last_ate():
                 try:
                     with open(log_file, 'r') as f:
                         old_entries = json.load(f)
-                    food_entries = [e for e in old_entries if e.get('calories', 0) >= 20]
+                    food_entries = [e for e in old_entries if e.get('calories', 0) >= 20 or 'unknown' in e.get('food', '').lower() or 'unknown' in e.get('name', '').lower()]
                     if food_entries:
                         break
                 except (json.JSONDecodeError, IOError):
