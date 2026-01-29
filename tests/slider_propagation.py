@@ -62,8 +62,12 @@ async def get_displayed_amount(page):
 async def get_slider_value(page):
     """Get the current slider value."""
     slider = page.locator("input[type='range']").first
-    if await slider.count() > 0:
-        return int(await slider.input_value())
+    count = await slider.count()
+    print(f"   DEBUG: slider count = {count}")
+    if count > 0:
+        value = await slider.input_value()
+        print(f"   DEBUG: slider.input_value() = {value}")
+        return int(value)
     return None
 
 
@@ -118,13 +122,27 @@ async def test_slider_propagation():
             
             await page1.wait_for_load_state("networkidle")
             await page2.wait_for_load_state("networkidle")
-            
+
+            # Wait for slider to appear on amounts page
+            print("   DEBUG: Waiting for slider element...")
+            try:
+                await page1.wait_for_selector("input[type='range']", timeout=5000, state="visible")
+                print("   DEBUG: wait_for_selector succeeded")
+                # Add small delay to ensure JS has finished
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                print(f"   ⚠️  Warning: Slider didn't appear within 5s: {e}")
+
+            # Check the actual URL
+            url = page1.url
+            print(f"   DEBUG: page1 URL = {url}")
+
             await screenshot(page1, "01_amounts_initial")
             await screenshot(page2, "02_proteins_initial")
-            
+
             # === Step 2: Get initial values ===
             print("\n2️⃣  Reading initial values...")
-            
+
             initial_slider1 = await get_slider_value(page1)
             initial_display2 = await get_displayed_amount(page2)
             
