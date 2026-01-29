@@ -1,5 +1,10 @@
 # llm-use
 
+## Updating notes
+A commaond problem is not having entries for the foods you create.
+You can `nutrition-notes` to get information for this.
+
+
 ## Adding Foods
 ```nutrition-food add << 'EOF'
 [pads.PADNAME.foods.food-key]
