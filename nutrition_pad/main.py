@@ -203,9 +203,9 @@ HTML_INDEX = """
         document.addEventListener('DOMContentLoaded', function() {
             var buttons = document.querySelectorAll('.food-btn');
             buttons.forEach(function(btn) {
-                var name = btn.querySelector('.food-name');
-                if (name) {
-                    btn.style.background = hashColor(name.textContent.trim());
+                var foodId = btn.getAttribute('data-food-id');
+                if (foodId) {
+                    btn.style.background = hashColor(foodId);
                 }
             });
         });
@@ -289,6 +289,8 @@ HTML_INDEX = """
         {% if current_pad_data and current_pad_data.foods %}
             {% for food_key, food in current_pad_data.foods.items() %}
             <div class="food-btn {% if food.get('type') == 'unit' %}unit-food{% else %}amount-food{% endif %}"
+                 data-food-id="{{ food_key }}"
+                 style="background: {{ hash_color(food_key) }}"
                  onclick="logFood('{{ current_pad }}', '{{ food_key }}')">
                 <div class="food-btn-inner">
                     <div class="food-type-indicator">
@@ -299,13 +301,13 @@ HTML_INDEX = """
             </div>
             {% endfor %}
             {% if is_first_pad %}
-            <div class="food-btn amount-food" onclick="logFood('_unknown', 'amount')">
+            <div class="food-btn amount-food" data-food-id="_unknown_amount" style="background: {{ hash_color('_unknown_amount') }}" onclick="logFood('_unknown', 'amount')">
                 <div class="food-btn-inner">
                     <div class="food-type-indicator">{{ current_amount }}g</div>
                     <div class="food-name">Unknown</div>
                 </div>
             </div>
-            <div class="food-btn unit-food" onclick="logFood('_unknown', 'unit')">
+            <div class="food-btn unit-food" data-food-id="_unknown_unit" style="background: {{ hash_color('_unknown_unit') }}" onclick="logFood('_unknown', 'unit')">
                 <div class="food-btn-inner">
                     <div class="food-type-indicator">U</div>
                     <div class="food-name">Unknown</div>
@@ -999,6 +1001,18 @@ HTML_FOOD_EDITOR = """
 """
 
 
+# --- HELPER FUNCTIONS ---
+
+def hash_color(text):
+    """Generate a consistent color from a string using the same algorithm as JavaScript"""
+    hash_val = 5381
+    for char in text:
+        hash_val = ((hash_val << 5) + hash_val) ^ ord(char)
+    # Use golden ratio to spread hues more evenly
+    hue = abs((hash_val * 137.508) % 360)
+    return f'hsl({hue}, 75%, 45%)'
+
+
 # --- ROUTES ---
 
 @app.route('/')
@@ -1052,6 +1066,7 @@ def index():
                                 current_amount=current_amount_display,
                                 amounts_content=amounts_content,
                                 amounts_javascript=amounts_javascript,
+                                hash_color=hash_color,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 
