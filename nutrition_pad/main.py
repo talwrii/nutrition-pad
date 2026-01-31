@@ -597,33 +597,6 @@ HTML_NUTRITION = """
     <script src="/static/polling.js"></script>
     <script>
         setDebugMode({{ 'true' if js_debug else 'false' }});
-        // Simplified polling for nutrition page
-        function simplePoll() {
-            if (isPolling) return;
-            isPolling = true;
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/poll-updates?since=' + lastUpdate, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    isPolling = false;
-                    if (xhr.status === 200) {
-                        try {
-                            var data = JSON.parse(xhr.responseText);
-                            if (data.updated && data.timestamp > lastUpdate) {
-                                lastUpdate = data.timestamp;
-                                localStorage.setItem('lastUpdate', lastUpdate.toString());
-                                setTimeout(function() {
-                                    window.location.reload();
-                                }, 1000);
-                                return;
-                            }
-                        } catch (e) {}
-                    }
-                    setTimeout(simplePoll, 30000);
-                }
-            };
-            xhr.send();
-        }
         var pageLoadTime = new Date(); // Client time when page loaded
         var serverTimeAtLoad = null; // Server time when page loaded
         function updateTimeSinceAte() {
@@ -658,7 +631,7 @@ HTML_NUTRITION = """
             }
         }
         window.onload = function() {
-            simplePoll();
+            startLongPolling();
             updateTimeSinceAte();
             // Update time display every 30 seconds for accuracy
             setInterval(updateTimeSinceAte, 30000);

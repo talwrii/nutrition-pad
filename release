@@ -150,9 +150,18 @@ if [ -f tests/slider_propagation.py ]; then
         echo "❌ Tests failed"
         exit 1
     }
-    echo "  ✓ Tests passed"
+    echo "  ✓ Slider tests passed"
 else
-    echo "⚠️  No Playwright tests found, skipping"
+    echo "⚠️  No Playwright slider tests found, skipping"
+fi
+
+if [ -f tests/test_dashboard_refresh.py ]; then
+    echo "▶ Running dashboard refresh test..."
+    python3 tests/test_dashboard_refresh.py "http://127.0.0.1:$TEST_PORT" || {
+        echo "❌ Dashboard refresh test failed"
+        exit 1
+    }
+    echo "  ✓ Dashboard refresh test passed"
 fi
 
 # 5. Run CLI regression tests
