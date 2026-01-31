@@ -68,6 +68,7 @@ def test_critical_routes():
         ('GET', '/api/foods', 'List foods API'),
         ('GET', '/api/foods/search?q=test', 'Search foods API'),
         ('POST', '/api/resolve-unknown', 'Resolve unknown API'),
+        ('GET', '/api/entries', 'List entries API'),
     ]
 
     results = []

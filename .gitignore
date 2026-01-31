@@ -9,6 +9,8 @@ foods.toml
 *.backup
 
 screenshots
+openfood.creds
+build
 .venv-release
 .venv-test
 worktrees

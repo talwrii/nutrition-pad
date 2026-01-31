@@ -9,6 +9,7 @@ echo ""
 python3 tests/test_nutrition_food_cli.py
 python3 tests/test_nutrition_unknown_cli.py
 python3 tests/test_api_routes.py
+python3 tests/test_entries_api.py
 
 echo ""
 echo "✅ All tests completed!"

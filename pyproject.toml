@@ -17,6 +17,7 @@ nutrition-food = "nutrition_pad.food_cli:main"
 nutrition-client = "nutrition_pad.client_cli:main"
 nutrition-unknown = "nutrition_pad.unknown_cli:main"
 nutrition-record = "nutrition_pad.record_cli:main"
+nutrition-entries = "nutrition_pad.entries_cli:main"
 
 [tool.setuptools]
 packages = [ "nutrition_pad",]

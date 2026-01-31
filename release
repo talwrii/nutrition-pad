@@ -157,14 +157,22 @@ fi
 
 # 5. Run CLI regression tests
 echo "▶ Running CLI regression tests..."
-if [ -f tests/test_nutrition_food_cli.py ]; then
-    python3 tests/test_nutrition_food_cli.py || {
-        echo "❌ CLI tests failed"
-        exit 1
-    }
-else
-    echo "⚠️  No CLI tests found, skipping"
-fi
+python3 tests/test_nutrition_food_cli.py || {
+    echo "❌ Food CLI tests failed"
+    exit 1
+}
+python3 tests/test_nutrition_unknown_cli.py || {
+    echo "❌ Unknown CLI tests failed"
+    exit 1
+}
+python3 tests/test_api_routes.py || {
+    echo "❌ API routes tests failed"
+    exit 1
+}
+python3 tests/test_entries_api.py || {
+    echo "❌ Entries API tests failed"
+    exit 1
+}
 
 # Stop test server
 echo "▶ Stopping test server..."

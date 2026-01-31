@@ -1249,6 +1249,33 @@ def api_notes():
     return jsonify(result)
 
 
+@app.route('/api/entries')
+def api_entries():
+    """API endpoint to get food log entries as JSON"""
+    from datetime import timedelta
+    days = int(request.args.get('days', 1))
+    result = {
+        'dates': []
+    }
+    for days_ago in range(days):
+        target_date = date.today() - timedelta(days=days_ago)
+        date_str = target_date.strftime('%Y-%m-%d')
+        log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
+        entries = []
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r') as f:
+                    entries = json.load(f)
+            except:
+                pass
+        if entries:
+            result['dates'].append({
+                'date': date_str,
+                'entries': entries
+            })
+    return jsonify(result)
+
+
 @app.route('/api/foods')
 def api_foods():
     """API endpoint to get all foods as JSON"""
