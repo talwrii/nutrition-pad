@@ -310,7 +310,7 @@ def calculate_nutrition_stats():
     now = datetime.now()
     five_am = now.replace(hour=5, minute=0, second=0, microsecond=0)
     if now < five_am:
-        five_am = five_am.replace(day=five_am.day - 1)
+        five_am = five_am - timedelta(days=1)
     
     hours_since_5am = (now - five_am).total_seconds() / 3600
     hours_since_5am = max(hours_since_5am, 0.1)
