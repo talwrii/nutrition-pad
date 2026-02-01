@@ -167,8 +167,8 @@ HTML_INDEX = """
         }
         @media (min-width: 768px) {
             .food-btn {
-                width: 17%;
-                padding-bottom: 17%;
+                width: 22%;
+                padding-bottom: 22%;
             }
             .food-btn .food-name {
                 font-size: 1.6em;
