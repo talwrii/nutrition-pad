@@ -1,6 +1,6 @@
 [project]
 name = "nutrition-pad"
-version = "4.2.0"
+version = "4.2.1"
 description = "Nutrition tracking with tablet-friendly interface"
 readme = "README.md"
 requires-python = ">=3.8"
