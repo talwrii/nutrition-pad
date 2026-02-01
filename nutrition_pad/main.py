@@ -1444,6 +1444,59 @@ def api_foods_add():
         return jsonify({'success': False, 'error': f'Error saving config: {str(e)}'}), 500
 
 
+@app.route('/api/foods/deactivate', methods=['POST'])
+def api_foods_deactivate():
+    """API endpoint to deactivate a food (set active = false)"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    food_key = data.get('food_key')
+    pad_key = data.get('pad_key')
+    if not food_key:
+        return jsonify({'success': False, 'error': 'Missing food_key'}), 400
+    # Load config
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = toml.load(f)
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading config: {str(e)}'}), 500
+    # Find the food
+    if pad_key:
+        pad = config.get('pads', {}).get(pad_key)
+        if not pad or food_key not in pad.get('foods', {}):
+            return jsonify({'success': False, 'error': f'Food {pad_key}/{food_key} not found'}), 404
+    else:
+        # Search all pads
+        for pk, pd in config.get('pads', {}).items():
+            if pk == 'amounts':
+                continue
+            if food_key in pd.get('foods', {}):
+                pad_key = pk
+                break
+        if not pad_key:
+            return jsonify({'success': False, 'error': f'Food {food_key} not found'}), 404
+    config['pads'][pad_key]['foods'][food_key]['active'] = False
+    # Save
+    try:
+        backup_file = CONFIG_FILE + '.backup'
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                backup_content = f.read()
+            with open(backup_file, 'w') as f:
+                f.write(backup_content)
+        with open(CONFIG_FILE, 'w') as f:
+            toml.dump(config, f)
+        mark_updated("food_deactivated")
+        return jsonify({
+            'success': True,
+            'pad_key': pad_key,
+            'food_key': food_key,
+            'name': config['pads'][pad_key]['foods'][food_key].get('name', food_key)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error saving config: {str(e)}'}), 500
+
+
 @app.route('/api/resolve-unknown', methods=['POST'])
 def api_resolve_unknown():
     """API endpoint to resolve unknown food entries"""

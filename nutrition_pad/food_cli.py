@@ -290,6 +290,70 @@ def cmd_get(args):
 
     return 0
 
+def cmd_deactivate(args):
+    """Deactivate a food (hide from button grid)"""
+    food_id = args.food_id
+
+    if '/' in food_id:
+        parts = food_id.split('/')
+        if len(parts) != 2:
+            print("Error: Path must be in format: pad_key/food_key or just food_key", file=sys.stderr)
+            return 1
+        pad_key, food_id = parts
+    else:
+        pad_key = None
+
+    if args.local:
+        config = load_local_config()
+        if not config:
+            return 1
+
+        # Find the food
+        if pad_key:
+            pad = config.get('pads', {}).get(pad_key)
+            if not pad or food_id not in pad.get('foods', {}):
+                print(f"Error: Food '{pad_key}/{food_id}' not found", file=sys.stderr)
+                return 1
+        else:
+            for pk, pd in config.get('pads', {}).items():
+                if pk == 'amounts':
+                    continue
+                if food_id in pd.get('foods', {}):
+                    pad_key = pk
+                    break
+            if not pad_key:
+                print(f"Error: Food '{food_id}' not found", file=sys.stderr)
+                return 1
+
+        food_name = config['pads'][pad_key]['foods'][food_id].get('name', food_id)
+        config['pads'][pad_key]['foods'][food_id]['active'] = False
+
+        with open(CONFIG_FILE, 'w') as f:
+            toml.dump(config, f)
+
+        print(f"Deactivated: {food_name} ({pad_key}/{food_id})")
+        return 0
+
+    server_config = load_server_config()
+    server = server_config.get('server', 'localhost:5000')
+
+    data = {'food_key': food_id}
+    if pad_key:
+        data['pad_key'] = pad_key
+
+    result = post_to_server(server, '/api/foods/deactivate', data)
+
+    if result is None:
+        return 1
+
+    if result.get('success'):
+        print(f"Deactivated: {result.get('name', food_id)} ({result.get('pad_key')}/{food_id})")
+        return 0
+    else:
+        print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+        return 1
+
+
 def cmd_raw(args):
     """Dump the complete foods.toml file"""
     if args.local:
@@ -373,6 +437,10 @@ def main():
     get_parser.add_argument('food_id', help='Food ID (or pad_key/food_key)')
     get_parser.add_argument('--raw', action='store_true', help='Output as raw TOML')
 
+    # Deactivate command
+    deactivate_parser = subparsers.add_parser('deactivate', help='Deactivate a food')
+    deactivate_parser.add_argument('food_id', help='Food ID (or pad_key/food_key)')
+
     # Raw command
     raw_parser = subparsers.add_parser('raw', help='Dump complete foods.toml')
 
@@ -391,6 +459,8 @@ def main():
         return cmd_list(args)
     elif args.command == 'get':
         return cmd_get(args)
+    elif args.command == 'deactivate':
+        return cmd_deactivate(args)
     elif args.command == 'raw':
         return cmd_raw(args)
     elif args.command == 'add':
