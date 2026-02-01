@@ -288,6 +288,7 @@ HTML_INDEX = """
     <div id="food-grid" class="food-grid">
         {% if current_pad_data and current_pad_data.foods %}
             {% for food_key, food in current_pad_data.foods.items() %}
+            {% if food.get('active', true) %}
             <div class="food-btn {% if food.get('type') == 'unit' %}unit-food{% else %}amount-food{% endif %}"
                  data-food-id="{{ food_key }}"
                  style="background: {{ hash_color(food_key) }}"
@@ -299,6 +300,7 @@ HTML_INDEX = """
                     <div class="food-name">{{ food.display_name or food.name }}</div>
                 </div>
             </div>
+            {% endif %}
             {% endfor %}
             {% if is_first_pad %}
             <div class="food-btn amount-food" data-food-id="_unknown_amount" style="background: {{ hash_color('_unknown_amount') }}" onclick="logFood('_unknown', 'amount')">

@@ -10,6 +10,7 @@ Foods live in `foods.toml` under `[pads.<pad_name>.foods.<food_key>]`.
 
 **Optional (all types):**
 - `display_name` - Short name shown on buttons and saved to logs. Falls back to `name` if not set.
+- `active` - Set to `false` to hide from the button grid. Defaults to `true`. Inactive foods still work for historical log entries.
 
 **For `type = "amount"`:**
 - `calories_per_gram`
