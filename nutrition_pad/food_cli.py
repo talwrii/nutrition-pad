@@ -248,6 +248,63 @@ def cmd_raw(args):
     return 0
 
 
+def cmd_edit(args):
+    """Fetch foods.toml, open in $EDITOR, push back to server"""
+    import subprocess
+    import tempfile
+
+    server = get_server()
+
+    text = fetch_text_from_server(server, '/api/foods/raw')
+    if text is None:
+        return 1
+
+    editor = os.environ.get('EDITOR', 'vi')
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+        f.write(text)
+        tmpfile = f.name
+
+    try:
+        result = subprocess.run([editor, tmpfile])
+        if result.returncode != 0:
+            print(f"Editor exited with code {result.returncode}", file=sys.stderr)
+            return 1
+
+        with open(tmpfile, 'r') as f:
+            new_content = f.read()
+
+        if new_content == text:
+            print("No changes made")
+            return 0
+
+        # Validate TOML before pushing
+        try:
+            import toml
+            toml.loads(new_content)
+        except Exception as e:
+            print(f"Error: Invalid TOML: {e}", file=sys.stderr)
+            print(f"Your edits are saved at: {tmpfile}", file=sys.stderr)
+            return 1
+
+        result = post_to_server(server, '/edit-foods', {'content': new_content})
+        if result is None:
+            print(f"Your edits are saved at: {tmpfile}", file=sys.stderr)
+            return 1
+
+        if result.get('success'):
+            print("Config updated successfully")
+            os.unlink(tmpfile)
+            return 0
+        else:
+            print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            print(f"Your edits are saved at: {tmpfile}", file=sys.stderr)
+            return 1
+    except KeyboardInterrupt:
+        print(f"\nAborted. Your edits are saved at: {tmpfile}", file=sys.stderr)
+        return 1
+
+
 def cmd_add(args):
     """Add food from stdin TOML"""
     # Read TOML from stdin
@@ -306,6 +363,9 @@ def main():
     # Raw command
     raw_parser = subparsers.add_parser('raw', help='Dump complete foods.toml')
 
+    # Edit command
+    edit_parser = subparsers.add_parser('edit', help='Edit foods.toml in $EDITOR')
+
     # Add command
     add_parser = subparsers.add_parser('add', help='Add food from stdin TOML')
 
@@ -325,6 +385,8 @@ def main():
         return cmd_deactivate(args)
     elif args.command == 'raw':
         return cmd_raw(args)
+    elif args.command == 'edit':
+        return cmd_edit(args)
     elif args.command == 'add':
         return cmd_add(args)
     else:
