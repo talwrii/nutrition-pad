@@ -248,6 +248,72 @@ def cmd_raw(args):
     return 0
 
 
+def cmd_replace(args):
+    """Replace a food entry by piping in new TOML"""
+    print("Enter TOML configuration (Ctrl+D when done):", file=sys.stderr)
+    toml_content = sys.stdin.read()
+
+    if not toml_content.strip():
+        print("Error: No TOML content provided", file=sys.stderr)
+        return 1
+
+    try:
+        import toml
+        parsed = toml.loads(toml_content)
+    except Exception as e:
+        print(f"Error parsing TOML: {e}", file=sys.stderr)
+        return 1
+
+    # Extract pad_key and food_key from the TOML path
+    pads = parsed.get('pads', {})
+    if not pads:
+        print("Error: TOML must have [pads.<pad>.foods.<food>] structure", file=sys.stderr)
+        return 1
+
+    pad_key = list(pads.keys())[0]
+    foods = pads[pad_key].get('foods', {})
+    if not foods:
+        print(f"Error: No foods found under pads.{pad_key}", file=sys.stderr)
+        return 1
+
+    food_key = list(foods.keys())[0]
+    new_food = foods[food_key]
+
+    # Fetch current config
+    server = get_server()
+    text = fetch_text_from_server(server, '/api/foods/raw')
+    if text is None:
+        return 1
+
+    try:
+        import toml
+        config = toml.loads(text)
+    except Exception as e:
+        print(f"Error parsing server config: {e}", file=sys.stderr)
+        return 1
+
+    # Check food exists
+    if pad_key not in config.get('pads', {}) or food_key not in config['pads'][pad_key].get('foods', {}):
+        print(f"Error: {pad_key}/{food_key} not found on server", file=sys.stderr)
+        return 1
+
+    # Replace
+    config['pads'][pad_key]['foods'][food_key] = new_food
+
+    # Push back
+    new_content = toml.dumps(config)
+    result = post_to_server(server, '/edit-foods', {'content': new_content})
+    if result is None:
+        return 1
+
+    if result.get('success'):
+        print(f"Replaced: {new_food.get('name', food_key)} ({pad_key}/{food_key})")
+        return 0
+    else:
+        print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+        return 1
+
+
 def cmd_edit(args):
     """Fetch foods.toml, open in $EDITOR, push back to server"""
     import subprocess
@@ -363,6 +429,9 @@ def main():
     # Raw command
     raw_parser = subparsers.add_parser('raw', help='Dump complete foods.toml')
 
+    # Replace command
+    replace_parser = subparsers.add_parser('replace', help='Replace a food from stdin TOML')
+
     # Edit command
     edit_parser = subparsers.add_parser('edit', help='Edit foods.toml in $EDITOR')
 
@@ -385,6 +454,8 @@ def main():
         return cmd_deactivate(args)
     elif args.command == 'raw':
         return cmd_raw(args)
+    elif args.command == 'replace':
+        return cmd_replace(args)
     elif args.command == 'edit':
         return cmd_edit(args)
     elif args.command == 'add':
