@@ -260,7 +260,7 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
         'time': time_str,
         'pad': pad_key,
         'food': food_key,
-        'name': food_data.get('name', food_key),
+        'name': food_data.get('display_name', food_data.get('name', food_key)),
         'amount': entry_amount,
         'amount_display': amount_display,
         'calories': round(calories, 1),

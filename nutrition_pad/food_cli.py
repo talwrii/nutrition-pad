@@ -290,6 +290,31 @@ def cmd_get(args):
 
     return 0
 
+def cmd_raw(args):
+    """Dump the complete foods.toml file"""
+    if args.local:
+        if not os.path.exists(CONFIG_FILE):
+            print(f"Error: {CONFIG_FILE} not found", file=sys.stderr)
+            return 1
+        with open(CONFIG_FILE, 'r') as f:
+            print(f.read(), end='')
+        return 0
+
+    server_config = load_server_config()
+    server = server_config.get('server', 'localhost:5000')
+
+    try:
+        import urllib.request
+        url = f"http://{server}/api/foods/raw"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            print(response.read().decode('utf-8'), end='')
+        return 0
+    except Exception as e:
+        print(f"Error fetching from server: {e}", file=sys.stderr)
+        print("\nUse --local to read local files instead", file=sys.stderr)
+        return 1
+
+
 def cmd_add(args):
     """Add food from stdin TOML"""
     # Read TOML from stdin
@@ -348,6 +373,9 @@ def main():
     get_parser.add_argument('food_id', help='Food ID (or pad_key/food_key)')
     get_parser.add_argument('--raw', action='store_true', help='Output as raw TOML')
 
+    # Raw command
+    raw_parser = subparsers.add_parser('raw', help='Dump complete foods.toml')
+
     # Add command
     add_parser = subparsers.add_parser('add', help='Add food from stdin TOML')
 
@@ -363,6 +391,8 @@ def main():
         return cmd_list(args)
     elif args.command == 'get':
         return cmd_get(args)
+    elif args.command == 'raw':
+        return cmd_raw(args)
     elif args.command == 'add':
         return cmd_add(args)
     else:

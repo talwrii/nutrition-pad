@@ -296,7 +296,7 @@ HTML_INDEX = """
                     <div class="food-type-indicator">
                         {% if food.get('type') == 'unit' %}U{% else %}{{ current_amount }}g{% endif %}
                     </div>
-                    <div class="food-name">{{ food.name }}</div>
+                    <div class="food-name">{{ food.display_name or food.name }}</div>
                 </div>
             </div>
             {% endfor %}
@@ -1276,6 +1276,18 @@ def api_foods():
                 food_entry['scale'] = food.get('scale')
             foods.append(food_entry)
     return jsonify({'foods': foods})
+
+
+@app.route('/api/foods/raw')
+def api_foods_raw():
+    """API endpoint to get raw foods.toml content"""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            content = f.read()
+        from flask import Response
+        return Response(content, mimetype='text/plain')
+    except FileNotFoundError:
+        return jsonify({'error': 'Config file not found'}), 404
 
 
 @app.route('/api/foods/search')
