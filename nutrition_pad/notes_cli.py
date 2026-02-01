@@ -238,7 +238,6 @@ def main():
     )
     parser.add_argument('--days', type=int, default=1, help='Number of days to show (default: 1 = today only)')
     parser.add_argument('--all', action='store_true', help='Show all available days')
-    parser.add_argument('--local', action='store_true', help='Read from local files instead of server')
     parser.add_argument('--backfill', action='store_true', help='Add IDs to historic entries that lack them')
     args = parser.parse_args()
     
@@ -262,53 +261,15 @@ def main():
     # Fetch from server OR local, NEVER both
     dates_data = []
     
-    if args.local:
-        # Explicitly read from local files
-        if args.all:
-            # Find all log files locally
-            if not os.path.exists(LOGS_DIR):
-                print("No logs directory found")
-                return
-            
-            files = os.listdir(LOGS_DIR)
-            dates = set()
-            for f in files:
-                if f.endswith('.json'):
-                    date_part = f.replace('_notes.json', '').replace('.json', '')
-                    if date_part and date_part[0].isdigit():
-                        dates.add(date_part)
-            
-            dates = sorted(dates, reverse=True)
-        else:
-            # Generate dates for the specified number of days
-            dates = []
-            for days_ago in range(days):
-                target_date = date.today() - timedelta(days=days_ago)
-                dates.append(target_date.strftime('%Y-%m-%d'))
-        
-        # Load from local files
-        for date_str in dates:
-            notes = load_notes_local(date_str)
-            unknowns = load_unknowns_local(date_str)
-            
-            if notes or unknowns:
-                dates_data.append({
-                    'date': date_str,
-                    'notes': notes,
-                    'unknowns': unknowns
-                })
-    else:
-        # Fetch from server - do NOT fall back to local
-        dates_data = fetch_from_server(server, days)
-        
-        if dates_data is None:
-            print(f"\n❌ Error: Could not fetch from server: {server}")
-            print(f"Config file: {CONFIG_FILE}")
-            print("\nOptions:")
-            print(f"  1. Check that the server is running")
-            print(f"  2. Use --set-server to configure a different server")
-            print(f"  3. Use --local to read from local files instead")
-            return
+    dates_data = fetch_from_server(server, days)
+
+    if dates_data is None:
+        print(f"\n❌ Error: Could not fetch from server: {server}")
+        print(f"Config file: {CONFIG_FILE}")
+        print("\nOptions:")
+        print(f"  1. Check that the server is running")
+        print(f"  2. Use --set-server to configure a different server")
+        return
     
     if not dates_data:
         print("No data found")

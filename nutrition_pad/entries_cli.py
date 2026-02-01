@@ -6,11 +6,10 @@ Command-line tool to show food log entries from nutrition-pad.
 import os
 import json
 import argparse
-from datetime import date, timedelta
+from datetime import date
 
 CONFIG_DIR = os.path.expanduser('~/.nutrition-pad')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'notes.config')
-LOGS_DIR = 'daily_logs'
 
 
 def load_config():
@@ -37,19 +36,6 @@ def fetch_from_server(server, days):
     except Exception as e:
         print(f"Error fetching from server: {e}")
         return None
-
-
-def load_entries_local(date_str):
-    """Load entries for a specific date from local files"""
-    log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
-    if not os.path.exists(log_file):
-        return []
-
-    try:
-        with open(log_file, 'r') as f:
-            return json.load(f)
-    except:
-        return []
 
 
 def display_data(dates_data):
@@ -102,34 +88,19 @@ def main():
         epilog='Server configuration: Use "nutrition-client set-server HOST:PORT" to configure server'
     )
     parser.add_argument('--days', type=int, default=1, help='Number of days to show (default: 1 = today only)')
-    parser.add_argument('--local', action='store_true', help='Read from local files instead of server')
     args = parser.parse_args()
 
     config = load_config()
     server = config.get('server', 'localhost:5000')
 
-    dates_data = []
+    dates_data = fetch_from_server(server, args.days)
 
-    if args.local:
-        for days_ago in range(args.days):
-            target_date = date.today() - timedelta(days=days_ago)
-            date_str = target_date.strftime('%Y-%m-%d')
-            entries = load_entries_local(date_str)
-            if entries:
-                dates_data.append({
-                    'date': date_str,
-                    'entries': entries
-                })
-    else:
-        dates_data = fetch_from_server(server, args.days)
-
-        if dates_data is None:
-            print(f"\n❌ Error: Could not fetch from server: {server}")
-            print(f"Config file: {CONFIG_FILE}")
-            print("\nOptions:")
-            print(f"  1. Check that the server is running")
-            print(f"  2. Use --local to read from local files instead")
-            return
+    if dates_data is None:
+        print(f"\n❌ Error: Could not fetch from server: {server}")
+        print(f"Config file: {CONFIG_FILE}")
+        print("\nOptions:")
+        print(f"  1. Check that the server is running")
+        return
 
     if not dates_data:
         print("No entries found")

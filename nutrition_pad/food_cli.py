@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
 Command-line tool to manage foods in nutrition-pad.
-Can work with local config or remote server.
+Works with the nutrition-pad server via API.
 """
 import os
 import sys
 import json
 import argparse
-import toml
 
-CONFIG_FILE = 'foods.toml'
 CONFIG_DIR = os.path.expanduser('~/.nutrition-pad')
 SERVER_CONFIG_FILE = os.path.join(CONFIG_DIR, 'notes.config')
 
@@ -36,6 +34,18 @@ def fetch_from_server(server, endpoint):
         print(f"Error fetching from server: {e}", file=sys.stderr)
         return None
 
+def fetch_text_from_server(server, endpoint):
+    """Fetch text data from server"""
+    try:
+        import urllib.request
+
+        url = f"http://{server}{endpoint}"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            return response.read().decode('utf-8')
+    except Exception as e:
+        print(f"Error fetching from server: {e}", file=sys.stderr)
+        return None
+
 def post_to_server(server, endpoint, data):
     """Post data to server"""
     try:
@@ -54,79 +64,21 @@ def post_to_server(server, endpoint, data):
         print(f"Error posting to server: {e}", file=sys.stderr)
         return None
 
-def load_local_config():
-    """Load local foods.toml"""
-    if not os.path.exists(CONFIG_FILE):
-        print(f"Error: {CONFIG_FILE} not found", file=sys.stderr)
-        return None
-
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            return toml.load(f)
-    except Exception as e:
-        print(f"Error loading {CONFIG_FILE}: {e}", file=sys.stderr)
-        return None
-
-def get_all_foods_from_config(config):
-    """Extract all foods from config structure"""
-    foods = []
-
-    for pad_key, pad_data in config.get('pads', {}).items():
-        if pad_key == 'amounts':
-            continue
-
-        pad_name = pad_data.get('name', pad_key)
-
-        for food_key, food in pad_data.get('foods', {}).items():
-            food_entry = {
-                'pad_key': pad_key,
-                'pad_name': pad_name,
-                'food_key': food_key,
-                'name': food.get('name', food_key),
-                'type': food.get('type', 'amount'),
-                '_raw': food  # Keep original for --raw output
-            }
-
-            if food.get('type') == 'unit':
-                food_entry['calories'] = food.get('calories', 0)
-                food_entry['protein'] = food.get('protein', 0)
-            else:
-                food_entry['calories_per_gram'] = food.get('calories_per_gram', 0)
-                food_entry['protein_per_gram'] = food.get('protein_per_gram', 0)
-
-            foods.append(food_entry)
-
-    return foods
-
-def find_food_by_id(foods, food_id):
-    """Find a food by its ID (food_key), returns (food_entry, pad_key) or (None, None)"""
-    for food in foods:
-        if food['food_key'] == food_id:
-            return food, food['pad_key']
-    return None, None
+def get_server():
+    """Get server address from config"""
+    server_config = load_server_config()
+    return server_config.get('server', 'localhost:5000')
 
 def cmd_search(args):
     """Search for foods"""
     query = args.query.lower()
+    server = get_server()
 
-    if args.local:
-        config = load_local_config()
-        if not config:
-            return 1
+    data = fetch_from_server(server, f'/api/foods/search?q={query}')
+    if data is None:
+        return 1
 
-        foods = get_all_foods_from_config(config)
-    else:
-        server_config = load_server_config()
-        server = server_config.get('server', 'localhost:5000')
-
-        data = fetch_from_server(server, f'/api/foods/search?q={query}')
-        if data is None:
-            print("\nUse --local to search local files instead", file=sys.stderr)
-            return 1
-
-        foods = data.get('foods', [])
-
-    # Filter by query
+    foods = data.get('foods', [])
     matches = [f for f in foods if query in f['name'].lower() or query in f['food_key'].lower()]
 
     if not matches:
@@ -150,22 +102,13 @@ def cmd_search(args):
 
 def cmd_list(args):
     """List all foods"""
-    if args.local:
-        config = load_local_config()
-        if not config:
-            return 1
+    server = get_server()
 
-        foods = get_all_foods_from_config(config)
-    else:
-        server_config = load_server_config()
-        server = server_config.get('server', 'localhost:5000')
+    data = fetch_from_server(server, '/api/foods')
+    if data is None:
+        return 1
 
-        data = fetch_from_server(server, '/api/foods')
-        if data is None:
-            print("\nUse --local to list local files instead", file=sys.stderr)
-            return 1
-
-        foods = data.get('foods', [])
+    foods = data.get('foods', [])
 
     # Group by pad
     pads = {}
@@ -180,10 +123,10 @@ def cmd_list(args):
     for pad_name in sorted(pads.keys()):
         print(f"[{pad_name}]")
         pad_foods = sorted(pads[pad_name], key=lambda f: f['name'])
-        
+
         # Calculate max widths for alignment
         max_name = max(len(f['name']) for f in pad_foods)
-        
+
         for food in pad_foods:
             type_str = "U" if food['type'] == 'unit' else "A"
             name = food['name']
@@ -196,7 +139,7 @@ def cmd_list(args):
 def cmd_get(args):
     """Get specific food details"""
     food_id = args.food_id
-    
+
     # Support both "food_id" and "pad_key/food_key" formats
     if '/' in food_id:
         parts = food_id.split('/')
@@ -207,51 +150,22 @@ def cmd_get(args):
     else:
         pad_key = None
 
-    if args.local:
-        config = load_local_config()
-        if not config:
-            return 1
+    server = get_server()
 
-        if pad_key:
-            # Direct lookup
-            pad = config.get('pads', {}).get(pad_key)
-            if not pad:
-                print(f"Error: Pad '{pad_key}' not found", file=sys.stderr)
-                return 1
-
-            food = pad.get('foods', {}).get(food_id)
-            if not food:
-                print(f"Error: Food '{food_id}' not found in pad '{pad_key}'", file=sys.stderr)
-                return 1
-        else:
-            # Search all pads for food_id
-            foods = get_all_foods_from_config(config)
-            food_entry, pad_key = find_food_by_id(foods, food_id)
-            
-            if not food_entry:
-                print(f"Error: Food '{food_id}' not found", file=sys.stderr)
-                return 1
-            
-            food = food_entry.get('_raw', food_entry)
+    if pad_key:
+        data = fetch_from_server(server, f'/api/foods/{pad_key}/{food_id}')
     else:
-        server_config = load_server_config()
-        server = server_config.get('server', 'localhost:5000')
+        data = fetch_from_server(server, f'/api/foods/by-id/{food_id}')
 
-        if pad_key:
-            data = fetch_from_server(server, f'/api/foods/{pad_key}/{food_id}')
-        else:
-            data = fetch_from_server(server, f'/api/foods/by-id/{food_id}')
-        
-        if data is None:
-            print("\nUse --local to get from local files instead", file=sys.stderr)
-            return 1
+    if data is None:
+        return 1
 
-        food = data.get('food')
-        pad_key = data.get('pad_key', pad_key)
-        
-        if not food:
-            print(f"Error: Food not found", file=sys.stderr)
-            return 1
+    food = data.get('food')
+    pad_key = data.get('pad_key', pad_key)
+
+    if not food:
+        print(f"Error: Food not found", file=sys.stderr)
+        return 1
 
     # Output
     if args.raw:
@@ -303,39 +217,7 @@ def cmd_deactivate(args):
     else:
         pad_key = None
 
-    if args.local:
-        config = load_local_config()
-        if not config:
-            return 1
-
-        # Find the food
-        if pad_key:
-            pad = config.get('pads', {}).get(pad_key)
-            if not pad or food_id not in pad.get('foods', {}):
-                print(f"Error: Food '{pad_key}/{food_id}' not found", file=sys.stderr)
-                return 1
-        else:
-            for pk, pd in config.get('pads', {}).items():
-                if pk == 'amounts':
-                    continue
-                if food_id in pd.get('foods', {}):
-                    pad_key = pk
-                    break
-            if not pad_key:
-                print(f"Error: Food '{food_id}' not found", file=sys.stderr)
-                return 1
-
-        food_name = config['pads'][pad_key]['foods'][food_id].get('name', food_id)
-        config['pads'][pad_key]['foods'][food_id]['active'] = False
-
-        with open(CONFIG_FILE, 'w') as f:
-            toml.dump(config, f)
-
-        print(f"Deactivated: {food_name} ({pad_key}/{food_id})")
-        return 0
-
-    server_config = load_server_config()
-    server = server_config.get('server', 'localhost:5000')
+    server = get_server()
 
     data = {'food_key': food_id}
     if pad_key:
@@ -356,27 +238,14 @@ def cmd_deactivate(args):
 
 def cmd_raw(args):
     """Dump the complete foods.toml file"""
-    if args.local:
-        if not os.path.exists(CONFIG_FILE):
-            print(f"Error: {CONFIG_FILE} not found", file=sys.stderr)
-            return 1
-        with open(CONFIG_FILE, 'r') as f:
-            print(f.read(), end='')
-        return 0
+    server = get_server()
 
-    server_config = load_server_config()
-    server = server_config.get('server', 'localhost:5000')
-
-    try:
-        import urllib.request
-        url = f"http://{server}/api/foods/raw"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            print(response.read().decode('utf-8'), end='')
-        return 0
-    except Exception as e:
-        print(f"Error fetching from server: {e}", file=sys.stderr)
-        print("\nUse --local to read local files instead", file=sys.stderr)
+    text = fetch_text_from_server(server, '/api/foods/raw')
+    if text is None:
         return 1
+
+    print(text, end='')
+    return 0
 
 
 def cmd_add(args):
@@ -391,19 +260,13 @@ def cmd_add(args):
 
     # Parse TOML
     try:
+        import toml
         parsed = toml.loads(toml_content)
     except Exception as e:
         print(f"Error parsing TOML: {e}", file=sys.stderr)
         return 1
 
-    if args.local:
-        print("Error: --local mode not supported for add (would overwrite entire config)", file=sys.stderr)
-        print("Use the server to add foods safely", file=sys.stderr)
-        return 1
-
-    # Send to server
-    server_config = load_server_config()
-    server = server_config.get('server', 'localhost:5000')
+    server = get_server()
 
     result = post_to_server(server, '/api/foods', {'toml_content': toml_content})
 
@@ -411,17 +274,16 @@ def cmd_add(args):
         return 1
 
     if result.get('success'):
-        print(f"✅ Food added successfully!")
+        print(f"Food added successfully!")
         if result.get('pad_key') and result.get('food_key'):
             print(f"   Path: {result['pad_key']}/{result['food_key']}")
         return 0
     else:
-        print(f"❌ Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
+        print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
         return 1
 
 def main():
     parser = argparse.ArgumentParser(description='Manage nutrition-pad foods')
-    parser.add_argument('--local', action='store_true', help='Use local files instead of server')
 
     subparsers = parser.add_subparsers(dest='command', help='Command')
 
