@@ -993,6 +993,10 @@ def hash_color(text):
 @app.route('/')
 def index():
     pads = get_all_pads()
+    # Filter out pads where all foods are inactive
+    pads = {k: v for k, v in pads.items() if k == 'amounts' or any(
+        f.get('active', True) for f in v.get('foods', {}).values()
+    )}
     # Always ensure amounts tab is available
     if 'amounts' not in pads:
         pads['amounts'] = {'name': 'Set Amount'}
