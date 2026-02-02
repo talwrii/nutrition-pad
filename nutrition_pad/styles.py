@@ -137,10 +137,15 @@ body {
 }
 
 .stat-sub {
-    font-size: 1em;
+    font-size: 1.3em;
     color: rgba(255, 255, 255, 0.5);
     margin-top: -5px;
     margin-bottom: 5px;
+}
+
+.stat-rate {
+    font-size: 0.55em;
+    color: rgba(255, 255, 255, 0.45);
 }
 
 /* Log container */

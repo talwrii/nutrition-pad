@@ -200,6 +200,13 @@ def cmd_get(args):
 
         if food.get('scale') and food.get('scale') != 1.0:
             print(f"  Scale: {food.get('scale')}")
+
+        known_keys = {'name', 'display_name', 'type', 'calories', 'protein', 'fiber',
+                       'calories_per_gram', 'protein_per_gram', 'fiber_per_gram',
+                       'scale', 'pad', 'active', '_pad_key', '_food_key'}
+        extra = {k: v for k, v in food.items() if k not in known_keys}
+        for k, v in extra.items():
+            print(f"  {k}: {v}")
         print()
 
     return 0

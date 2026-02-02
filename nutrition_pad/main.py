@@ -11,10 +11,10 @@ import threading
 from .polling import register_polling_routes, get_current_amount, mark_updated, get_polling_javascript
 from .amounts import render_amounts_tab, get_amounts_javascript
 from .data import (
-    ensure_logs_directory, load_config, load_today_log, save_food_entry,
+    ensure_logs_directory, load_config, load_today_log, load_log_for_date, save_food_entry,
     calculate_daily_total, calculate_daily_item_count, calculate_nutrition_stats,
     validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR,
-    calculate_time_since_last_ate
+    calculate_time_since_last_ate, calculate_percentiles
 )
 from .styles import register_styles_routes
 from .notes import register_notes_routes
@@ -461,10 +461,18 @@ HTML_TODAY = """
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
-        <h1>Today's Log</h1>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+            <a href="/today?date={{ prev_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&larr;</a>
+            <h1 style="margin: 0;">{{ title }}</h1>
+            {% if not is_today %}
+            <a href="/today?date={{ next_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&rarr;</a>
+            {% else %}
+            <span style="width: 44px;"></span>
+            {% endif %}
+        </div>
         <div class="total-protein">{{ total_protein }}g protein</div>
         <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
-        <div class="item-count">{{ item_count }} items logged today</div>
+        <div class="item-count">{{ item_count }} items logged</div>
     </div>
     <div class="log-container">
         {% if log_entries %}
@@ -585,6 +593,11 @@ HTML_NUTRITION = """
             background: rgba(255, 107, 107, 0.2);
             border-color: #ff6b6b;
         }
+        .stat-pct {
+            font-size: 0.75em;
+            color: rgba(255, 255, 255, 0.45);
+            margin-top: 2px;
+        }
         @media (max-width: 768px) {
             .settings-cog {
                 font-size: 1.3em;
@@ -652,13 +665,11 @@ HTML_NUTRITION = """
     <div class="nutrition-stats">
         <div class="stat-cards">
             <div class="stat-card">
-                <div class="stat-value calories">{{ total_calories }}</div>
-                <div class="stat-sub">({{ cal_per_hour }}/h)</div>
+                <div class="stat-value calories">{{ total_calories }} <span class="stat-rate">({{ cal_per_hour }}/h)</span></div>
                 <div class="stat-label">Calories</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value protein">{{ total_protein }}g</div>
-                <div class="stat-sub">({{ protein_per_hour }}g/h)</div>
+                <div class="stat-value protein">{{ total_protein }}g <span class="stat-rate">({{ protein_per_hour }}g/h)</span></div>
                 <div class="stat-label">Protein</div>
             </div>
             <div class="stat-card">
@@ -683,10 +694,12 @@ HTML_NUTRITION = """
             </div>
             <div class="stat-card">
                 <div class="stat-value ratio">{{ avg_ratio }}</div>
+                {% if percentiles and percentiles.kcal_per_protein is not none %}<div class="stat-pct">{{ percentiles.kcal_per_protein }}%</div>{% endif %}
                 <div class="stat-label">kcal/g Protein</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value fiber-ratio">{{ kcal_per_fiber }}</div>
+                {% if percentiles and percentiles.kcal_per_fiber is not none %}<div class="stat-pct">{{ percentiles.kcal_per_fiber }}%</div>{% endif %}
                 <div class="stat-label">kcal/g Fiber</div>
             </div>
         </div>
@@ -1051,16 +1064,42 @@ def index():
 
 @app.route('/today')
 def today_log():
-    log_entries = load_today_log()
-    total_protein = calculate_daily_total()
-    stats = calculate_nutrition_stats()
-    avg_ratio = stats['avg_ratio']
-    item_count = calculate_daily_item_count()
+    from datetime import timedelta
+    date_str = request.args.get('date')
+    if date_str:
+        try:
+            target_date = date.fromisoformat(date_str)
+        except ValueError:
+            target_date = date.today()
+    else:
+        target_date = date.today()
+
+    log_entries = load_log_for_date(target_date)
+    total_protein = sum(e.get('protein', 0) for e in log_entries)
+    total_calories = sum(e.get('calories', 0) for e in log_entries)
+    avg_ratio = f"{total_calories / total_protein:.1f}" if total_protein > 0 else '--'
+    item_count = len(log_entries)
+    is_today = (target_date == date.today())
+
+    prev_date = (target_date - timedelta(days=1)).isoformat()
+    next_date = (target_date + timedelta(days=1)).isoformat()
+
+    if target_date == date.today():
+        title = "Today"
+    elif target_date == date.today() - timedelta(days=1):
+        title = "Yesterday"
+    else:
+        title = target_date.strftime('%a %d %b')
+
     return render_template_string(HTML_TODAY,
                                 log_entries=log_entries,
                                 total_protein=total_protein,
                                 avg_ratio=avg_ratio,
                                 item_count=item_count,
+                                title=title,
+                                prev_date=prev_date,
+                                next_date=next_date,
+                                is_today=is_today,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 
@@ -1071,6 +1110,7 @@ def nutrition_dashboard():
     time_since_last_ate = calculate_time_since_last_ate()
     # Send server's current time for accurate client-side calculations
     server_time = datetime.now().isoformat()
+    percentiles = calculate_percentiles()
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
@@ -1082,6 +1122,7 @@ def nutrition_dashboard():
                                 kcal_per_fiber=stats.get('kcal_per_fiber', '--'),
                                 time_since_last_ate=time_since_last_ate,
                                 server_time=server_time,
+                                percentiles=percentiles,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 

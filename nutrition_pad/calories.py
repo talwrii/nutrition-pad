@@ -73,33 +73,75 @@ HTML_CALORIES = """
         /* Cumulative graph using SVG */
         .cumulative-graph {
             position: relative;
-            height: 180px;
+            height: 220px;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 10px;
-            overflow: hidden;
+            overflow: visible;
+            margin-top: 30px;
         }
-        
+
         .cumulative-graph svg {
             width: 100%;
             height: 100%;
         }
-        
+
         .graph-line {
             fill: none;
             stroke-width: 2.5;
             stroke-linecap: round;
             stroke-linejoin: round;
         }
-        
+
         .calories-line { stroke: #ff6b6b; }
         .protein-line { stroke: #4ecdc4; }
         .fiber-line { stroke: #ffd93d; }
-        
+
         .graph-area {
             opacity: 0.15;
         }
         .calories-area { fill: #ff6b6b; }
-        .protein-area { fill: #4ecdc4; }
+
+        .entry-dot {
+            fill: #ff6b6b;
+            cursor: pointer;
+        }
+        .entry-dot:hover {
+            fill: #fff;
+            r: 2.5;
+        }
+        .graph-tooltip {
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 0.8em;
+            color: #fff;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 10;
+        }
+        .graph-tooltip.visible { opacity: 1; }
+        .graph-tooltip .tt-name { font-weight: 600; }
+        .graph-tooltip .tt-detail { color: rgba(255,255,255,0.6); margin-left: 8px; }
+
+        .hour-labels {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0 0 0;
+        }
+        .hour-label {
+            font-size: 0.7em;
+            color: rgba(255, 255, 255, 0.4);
+            width: 0;
+            text-align: center;
+        }
+        .hour-label:first-child { text-align: left; width: auto; }
+        .hour-label:last-child { text-align: right; width: auto; }
         
         /* Graph legend */
         .graph-legend {
@@ -155,6 +197,40 @@ HTML_CALORIES = """
             text-transform: uppercase;
         }
         
+        /* Window bars */
+        .window-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .window-label {
+            width: 45px;
+            font-size: 0.8em;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .window-bar-bg {
+            flex: 1;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .window-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+            border-radius: 4px;
+            min-width: 2px;
+        }
+        .window-cal {
+            width: 110px;
+            font-size: 0.8em;
+            color: rgba(255, 255, 255, 0.6);
+            flex-shrink: 0;
+        }
+
         /* Entries list */
         .entries-section {
             background: rgba(255, 255, 255, 0.08);
@@ -173,7 +249,7 @@ HTML_CALORIES = """
         
         .entry-item {
             display: grid;
-            grid-template-columns: 50px 1fr auto auto auto;
+            grid-template-columns: 40px 1fr auto auto auto auto;
             gap: 10px;
             align-items: center;
             padding: 12px 0;
@@ -240,10 +316,19 @@ HTML_CALORIES = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/nutrition" class="notes-link" title="Dashboard"><i class="fas fa-chart-pie"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
-        <h1>Calories Timeline</h1>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+            <a href="/calories?date={{ prev_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&larr;</a>
+            <h1 style="margin: 0;">{{ title }}</h1>
+            {% if not is_today %}
+            <a href="/calories?date={{ next_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&rarr;</a>
+            {% else %}
+            <span style="width: 44px;"></span>
+            {% endif %}
+        </div>
     </div>
     
     <div class="timeline-container">
@@ -254,12 +339,12 @@ HTML_CALORIES = """
                 <div class="stat-label">Calories</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value protein">{{ total_protein }}g</div>
-                <div class="stat-label">Protein</div>
+                <div class="stat-value protein">{{ cal_per_protein }}</div>
+                <div class="stat-label">kcal/g protein</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value fiber">{{ total_fiber }}g</div>
-                <div class="stat-label">Fiber</div>
+                <div class="stat-value fiber">{{ cal_per_fiber }}</div>
+                <div class="stat-label">kcal/g fiber</div>
             </div>
         </div>
         
@@ -268,17 +353,65 @@ HTML_CALORIES = """
             <div class="graph-title">Cumulative Intake</div>
             <div class="cumulative-graph">
                 <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <!-- Hour grid lines -->
+                    {% for h in range(0, 25, 6) %}
+                    <line x1="{{ h / 24 * 100 }}" y1="0" x2="{{ h / 24 * 100 }}" y2="100"
+                          stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+                    {% endfor %}
+
                     <!-- Calories area and line -->
                     <path class="graph-area calories-area" d="{{ calories_area_path }}"/>
                     <path class="graph-line calories-line" d="{{ calories_line_path }}"/>
-                    
-                    <!-- Protein area and line (scaled 10x) -->
-                    <path class="graph-area protein-area" d="{{ protein_area_path }}"/>
+
+                    <!-- kcal/g protein ratio line -->
                     <path class="graph-line protein-line" d="{{ protein_line_path }}"/>
-                    
-                    <!-- Fiber line (scaled 20x) -->
+
+                    <!-- kcal/g fiber ratio line -->
                     <path class="graph-line fiber-line" d="{{ fiber_line_path }}"/>
+
+                    <!-- Entry dots on calorie line -->
+                    {% for dot in entry_dots %}
+                    <circle class="entry-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="1.5"
+                            data-name="{{ dot.name }}" data-time="{{ dot.time }}"
+                            data-cal="{{ dot.calories }}" data-protein="{{ dot.protein }}"
+                            data-fiber="{{ dot.fiber }}" data-amount="{{ dot.amount }}"
+                            data-ccal="{{ dot.cum_cal }}" data-cprot="{{ dot.cum_protein }}"
+                            data-cfib="{{ dot.cum_fiber }}" data-pct="{{ dot.pct }}"/>
+                    {% endfor %}
                 </svg>
+                <div class="graph-tooltip" id="graphTooltip"></div>
+            </div>
+            <script>
+            (function() {
+                var tip = document.getElementById('graphTooltip');
+                document.querySelectorAll('.entry-dot').forEach(function(dot) {
+                    dot.addEventListener('mouseenter', function() {
+                        var n = dot.getAttribute('data-name');
+                        var t = dot.getAttribute('data-time');
+                        var c = dot.getAttribute('data-cal');
+                        var p = dot.getAttribute('data-protein');
+                        var f = dot.getAttribute('data-fiber');
+                        var a = dot.getAttribute('data-amount');
+                        var cc = dot.getAttribute('data-ccal');
+                        var cp = dot.getAttribute('data-cprot');
+                        var cf = dot.getAttribute('data-cfib');
+                        var pct = dot.getAttribute('data-pct');
+                        tip.innerHTML =
+                            '<div style="font-weight:600;margin-bottom:3px;">' + n + ' <span style="color:rgba(255,255,255,0.5)">' + a + ' @ ' + t + '</span></div>' +
+                            '<div><span style="color:#ff6b6b">' + c + ' cal</span> · <span style="color:#4ecdc4">' + p + 'g prot</span> · <span style="color:#ffd93d">' + f + 'g fiber</span></div>' +
+                            '<div style="margin-top:3px;color:rgba(255,255,255,0.5);">\u03A3 <span style="color:#ff6b6b">' + cc + ' cal</span> · <span style="color:#4ecdc4">' + cp + 'g prot</span> · <span style="color:#ffd93d">' + cf + 'g fiber</span> · <span style="color:#fff">' + pct + '%</span> of day</div>';
+                        tip.classList.add('visible');
+                    });
+                    dot.addEventListener('mouseleave', function() {
+                        tip.classList.remove('visible');
+                    });
+                });
+            })();
+            </script>
+            <div class="hour-labels">
+                {% for h in range(0, 25, 3) %}
+                <span class="hour-label">{{ '%02d'|format(h % 24) }}</span>
+                {% endfor %}
             </div>
             <div class="graph-legend">
                 <div class="legend-item">
@@ -287,33 +420,66 @@ HTML_CALORIES = """
                 </div>
                 <div class="legend-item">
                     <div class="legend-color protein"></div>
-                    <span>Protein (×10)</span>
+                    <span>kcal/g protein</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color fiber"></div>
-                    <span>Fiber (×20)</span>
+                    <span>kcal/g fiber</span>
                 </div>
             </div>
         </div>
         
+        <!-- 2-hour window breakdown -->
+        {% if windows_sorted %}
+        <div class="graph-section" style="margin-bottom: 25px;">
+            <div class="graph-title">Calories by 2-Hour Window</div>
+            {% set wcum = namespace(value=0) %}
+            {% for label, cal in windows_sorted %}
+            {% set wcum.value = wcum.value + cal %}
+            <div class="window-row">
+                <div class="window-label">{{ label }}</div>
+                <div class="window-bar-bg">
+                    <div class="window-bar" style="width: {{ (cal / max_window_cal * 100)|round }}%;"></div>
+                </div>
+                <div class="window-cal">{{ cal|round|int }} cal <span style="color:rgba(255,255,255,0.4);">{{ (cal / total_calories * 100)|round|int }}%</span> <span style="color:rgba(255,255,255,0.3);">{{ (wcum.value / total_calories * 100)|round|int }}%</span></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Fasting gaps -->
+        {% if top_fasts %}
+        <div class="graph-section" style="margin-bottom: 25px;">
+            <div class="graph-title">Longest Fasting Gaps</div>
+            {% for gap in top_fasts %}
+            <div class="window-row">
+                <div class="window-label">{{ gap.start }}</div>
+                <div class="window-bar-bg">
+                    <div class="window-bar" style="width: {{ (gap.minutes / top_fasts[0].minutes * 100)|round }}%; background: linear-gradient(90deg, #4ecdc4, #2ab7ad);"></div>
+                </div>
+                <div class="window-cal" style="color:#4ecdc4;">{{ gap.duration }} <span style="color:rgba(255,255,255,0.4);">→ {{ gap.end }}</span></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Entries list -->
         <div class="entries-section">
-            <div class="entries-title">Today's Entries</div>
+            <div class="entries-title">By Calories</div>
             {% if entries %}
                 {% set running_cal = namespace(value=0) %}
-                {% set running_prot = namespace(value=0) %}
                 {% for entry in entries %}
                 {% set running_cal.value = running_cal.value + entry.calories %}
-                {% set running_prot.value = running_prot.value + entry.protein %}
-                <div class="entry-item with-running">
+                <div class="entry-item">
                     <div class="entry-time">{{ entry.time }}</div>
                     <div class="entry-food">
                         {{ entry.name }}
                         <span class="amount">{{ entry.amount_display }}</span>
                     </div>
-                    <div class="entry-calories">{{ entry.calories|round|int }} cal</div>
-                    <div class="entry-protein">{{ entry.protein|round(1) }}g</div>
-                    <div class="entry-running">Σ {{ running_cal.value|round|int }}</div>
+                    <div class="entry-calories">{{ entry.calories|round|int }} cal <span style="color:rgba(255,255,255,0.4);">({{ (entry.calories / total_calories * 100)|round|int }}%)</span></div>
+                    <div class="entry-protein">{{ entry.protein|round(1) }}g p</div>
+                    <div class="entry-fiber" style="color:#ffd93d;">{{ entry.fiber|round(1) }}g f</div>
+                    <div class="entry-running">{{ (running_cal.value / total_calories * 100)|round|int }}%</div>
                 </div>
                 {% endfor %}
             {% else %}
@@ -323,9 +489,6 @@ HTML_CALORIES = """
     </div>
     
     <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="window.location.href='/'">
-            Back to Food Pads
-        </button>
         <button class="bottom-nav-btn" onclick="window.location.href='/nutrition'" style="background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
             Dashboard
         </button>
@@ -342,59 +505,136 @@ def time_to_x(time_str):
         minute = int(parts[1]) if len(parts) > 1 else 0
     except (ValueError, IndexError):
         return 50  # default to middle
-    
-    # Minutes since 6am (6am = 360 minutes from midnight)
+
     total_minutes = hour * 60 + minute
-    minutes_since_6am = total_minutes - 360
-    
-    # Wrap around if before 6am (treat as next day)
-    if minutes_since_6am < 0:
-        minutes_since_6am += 1440
-    
-    # Scale to 0-100 (18 hours = 1080 minutes from 6am to midnight)
-    x = (minutes_since_6am / 1080) * 100
+    # Scale to 0-100 over 24 hours (0=midnight, 100=midnight)
+    x = (total_minutes / 1440) * 100
     return max(0, min(100, x))
 
 
 def build_cumulative_path(entries, value_key, max_value, scale_factor=1):
-    """Build SVG path for cumulative line graph"""
+    """Build SVG path for cumulative step graph"""
     if not entries:
         return "M 0 100 L 100 100", "M 0 100 L 100 100 L 0 100 Z"
-    
-    points = []
+
+    parts = ["M 0 100"]
     running_total = 0
-    
-    # Start at 0
-    points.append((0, 100))
-    
+    prev_y = 100
+
     for entry in entries:
         x = time_to_x(entry.get('time', '12:00'))
+        # Horizontal line to this time at previous level
+        parts.append(f"L {x:.1f} {prev_y:.1f}")
         running_total += entry.get(value_key, 0) * scale_factor
         y = 100 - (running_total / max_value * 100) if max_value > 0 else 100
         y = max(0, min(100, y))
-        points.append((x, y))
-    
+        # Vertical jump to new level
+        parts.append(f"L {x:.1f} {y:.1f}")
+        prev_y = y
+
     # Extend to end of day at final value
-    if points:
-        points.append((100, points[-1][1]))
-    
-    # Build line path
-    line_path = "M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in points)
-    
-    # Build area path (closed shape)
-    area_path = line_path + f" L 100 100 L 0 100 Z"
-    
+    parts.append(f"L 100 {prev_y:.1f}")
+
+    line_path = " ".join(parts)
+    area_path = line_path + " L 100 100 L 0 100 Z"
+
     return line_path, area_path
+
+
+def build_ratio_path(entries, nutrient_key, max_ratio):
+    """Build SVG path for cumulative kcal/g ratio step graph"""
+    if not entries:
+        return "M 0 100 L 100 100"
+
+    parts = []
+    running_cal = 0
+    running_nutrient = 0
+    prev_y = None
+
+    for entry in entries:
+        x = time_to_x(entry.get('time', '12:00'))
+        running_cal += entry.get('calories', 0)
+        running_nutrient += entry.get(nutrient_key, 0)
+        if running_nutrient > 0:
+            ratio = running_cal / running_nutrient
+            y = 100 - (ratio / max_ratio * 100)
+            y = max(0, min(100, y))
+            if prev_y is not None:
+                parts.append(f"L {x:.1f} {prev_y:.1f}")
+            else:
+                parts.append(f"M {x:.1f} {y:.1f}")
+            parts.append(f"L {x:.1f} {y:.1f}")
+            prev_y = y
+
+    if not parts:
+        return "M 0 100 L 100 100"
+
+    parts.append(f"L 100 {prev_y:.1f}")
+    return " ".join(parts)
+
+
+def build_entry_dots(entries, max_calories):
+    """Build list of dot info for each entry on the cumulative calorie line"""
+    total_cal = sum(e.get('calories', 0) for e in entries)
+    dots = []
+    running_cal = 0
+    running_protein = 0
+    running_fiber = 0
+    for entry in entries:
+        x = time_to_x(entry.get('time', '12:00'))
+        cal = entry.get('calories', 0)
+        prot = entry.get('protein', 0)
+        fib = entry.get('fiber', 0)
+        running_cal += cal
+        running_protein += prot
+        running_fiber += fib
+        y = 100 - (running_cal / max_calories * 100) if max_calories > 0 else 100
+        y = max(0, min(100, y))
+        name = entry.get('name', entry.get('food', '?'))
+        amount = entry.get('amount_display', '')
+        time = entry.get('time', '')
+        pct = round(running_cal / total_cal * 100) if total_cal > 0 else 0
+        dots.append({
+            'x': x, 'y': y, 'name': name, 'time': time,
+            'calories': round(cal), 'protein': round(prot, 1),
+            'fiber': round(fib, 1), 'amount': amount,
+            'cum_cal': round(running_cal),
+            'cum_protein': round(running_protein, 1),
+            'cum_fiber': round(running_fiber, 1),
+            'pct': pct,
+        })
+    return dots
 
 
 def register_calories_routes(app):
     """Register calories timeline routes with the Flask app"""
     
-    from .data import load_today_log, LOGS_DIR
-    
+    from .data import load_today_log, load_log_for_date, LOGS_DIR
+    from datetime import timedelta
+    from flask import request
+
     @app.route('/calories')
     def calories_timeline():
-        entries = load_today_log()
+        date_str = request.args.get('date')
+        if date_str:
+            try:
+                target_date = date.fromisoformat(date_str)
+            except ValueError:
+                target_date = date.today()
+        else:
+            target_date = date.today()
+
+        entries = load_log_for_date(target_date)
+        is_today = (target_date == date.today())
+        prev_date = (target_date - timedelta(days=1)).isoformat()
+        next_date = (target_date + timedelta(days=1)).isoformat()
+
+        if target_date == date.today():
+            title = "Today"
+        elif target_date == date.today() - timedelta(days=1):
+            title = "Yesterday"
+        else:
+            title = target_date.strftime('%a %d %b')
         
         # Ensure fiber field exists for all entries
         for entry in entries:
@@ -410,18 +650,74 @@ def register_calories_routes(app):
         max_calories = max(total_calories, 2000)  # At least 2000 cal scale
         
         # Build cumulative graph paths
-        # Protein scaled by 10x, fiber by 20x to show on same graph as calories
         calories_line, calories_area = build_cumulative_path(entries, 'calories', max_calories)
-        protein_line, protein_area = build_cumulative_path(entries, 'protein', max_calories, scale_factor=10)
-        fiber_line, _ = build_cumulative_path(entries, 'fiber', max_calories, scale_factor=20)
-        
+        # Ratio lines: kcal/g protein (scale 0-30), kcal/g fiber (scale 0-200)
+        protein_ratio_line = build_ratio_path(entries, 'protein', 30)
+        fiber_ratio_line = build_ratio_path(entries, 'fiber', 200)
+
+        # Build entry dots for the calorie line
+        entry_dots = build_entry_dots(entries, max_calories)
+
+        # Entries sorted by calories descending
+        entries_by_cal = sorted(entries, key=lambda e: e.get('calories', 0), reverse=True)
+
+        # Fasting gaps between entries (sorted by duration)
+        fasting_gaps = []
+        if entries:
+            sorted_by_time = sorted(entries, key=lambda e: e.get('time', '00:00'))
+            for i in range(len(sorted_by_time) - 1):
+                t1 = sorted_by_time[i].get('time', '00:00')
+                t2 = sorted_by_time[i + 1].get('time', '00:00')
+                try:
+                    h1, m1 = int(t1.split(':')[0]), int(t1.split(':')[1])
+                    h2, m2 = int(t2.split(':')[0]), int(t2.split(':')[1])
+                    mins = (h2 * 60 + m2) - (h1 * 60 + m1)
+                    if mins > 0:
+                        hours = mins // 60
+                        remaining = mins % 60
+                        if hours > 0:
+                            dur = f"{hours}h {remaining:02d}m"
+                        else:
+                            dur = f"{remaining}m"
+                        fasting_gaps.append({
+                            'start': t1, 'end': t2,
+                            'minutes': mins, 'duration': dur,
+                        })
+                except (ValueError, IndexError):
+                    pass
+        fasting_gaps.sort(key=lambda g: g['minutes'], reverse=True)
+        top_fasts = fasting_gaps[:5]
+
+        # 2-hour window calorie breakdown
+        windows = {}
+        for entry in entries:
+            try:
+                hour = int(entry.get('time', '12:00').split(':')[0])
+            except (ValueError, IndexError):
+                hour = 12
+            bucket = (hour // 2) * 2
+            label = f"{bucket:02d}-{bucket+2:02d}"
+            windows[label] = windows.get(label, 0) + entry.get('calories', 0)
+        windows_sorted = sorted(windows.items(), key=lambda x: x[1], reverse=True)
+        max_window_cal = windows_sorted[0][1] if windows_sorted else 1
+
+        cal_per_protein = f"{total_calories / total_protein:.1f}" if total_protein > 0 else '--'
+        cal_per_fiber = f"{total_calories / total_fiber:.1f}" if total_fiber > 0 else '--'
+
         return render_template_string(HTML_CALORIES,
-                                    entries=entries,
+                                    entries=entries_by_cal,
+                                    windows_sorted=windows_sorted,
+                                    max_window_cal=max_window_cal,
+                                    top_fasts=top_fasts,
                                     total_calories=round(total_calories),
-                                    total_protein=round(total_protein, 1),
-                                    total_fiber=round(total_fiber, 1),
+                                    cal_per_protein=cal_per_protein,
+                                    cal_per_fiber=cal_per_fiber,
                                     calories_line_path=calories_line,
                                     calories_area_path=calories_area,
-                                    protein_line_path=protein_line,
-                                    protein_area_path=protein_area,
-                                    fiber_line_path=fiber_line)
+                                    protein_line_path=protein_ratio_line,
+                                    fiber_line_path=fiber_ratio_line,
+                                    entry_dots=entry_dots,
+                                    title=title,
+                                    prev_date=prev_date,
+                                    next_date=next_date,
+                                    is_today=is_today)

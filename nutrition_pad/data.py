@@ -168,18 +168,21 @@ def get_today_log_file():
     today = date.today().strftime('%Y-%m-%d')
     return os.path.join(LOGS_DIR, f'{today}.json')
 
-def load_today_log():
-    """Load today's food log"""
-    log_file = get_today_log_file()
-    
+def load_log_for_date(target_date):
+    """Load food log for a specific date"""
+    date_str = target_date.strftime('%Y-%m-%d')
+    log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
     if not os.path.exists(log_file):
         return []
-    
     try:
         with open(log_file, 'r') as f:
             return json.load(f)
     except (json.JSONDecodeError, IOError):
         return []
+
+def load_today_log():
+    """Load today's food log"""
+    return load_log_for_date(date.today())
 
 def backfill_entry_ids(entries):
     """Add IDs to entries that don't have them. Returns True if any were added."""
@@ -308,15 +311,13 @@ def calculate_nutrition_stats():
     kcal_per_fiber = total_calories / total_fiber if total_fiber > 0 else 0
     
     now = datetime.now()
-    five_am = now.replace(hour=5, minute=0, second=0, microsecond=0)
-    if now < five_am:
-        five_am = five_am - timedelta(days=1)
-    
-    hours_since_5am = (now - five_am).total_seconds() / 3600
-    hours_since_5am = max(hours_since_5am, 0.1)
-    
-    cal_per_hour = total_calories / hours_since_5am
-    protein_per_hour = total_protein / hours_since_5am
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    hours_since_midnight = (now - midnight).total_seconds() / 3600
+    hours_since_midnight = max(hours_since_midnight, 0.1)
+
+    cal_per_hour = total_calories / hours_since_midnight
+    protein_per_hour = total_protein / hours_since_midnight
     
     return {
         'total_calories': round(total_calories),
@@ -368,6 +369,260 @@ def calculate_time_since_last_ate():
         }
     except (ValueError, TypeError):
         return None
+
+PERCENTILE_CONFIG_FILE = os.path.join(LOGS_DIR, 'percentile_config.json')
+
+
+def load_percentile_config():
+    """Load percentile cutoff config. Auto-creates with today's date if missing."""
+    if not os.path.exists(PERCENTILE_CONFIG_FILE):
+        config = {'cutoff': date.today().strftime('%Y-%m-%d')}
+        try:
+            with open(PERCENTILE_CONFIG_FILE, 'w') as f:
+                json.dump(config, f)
+        except:
+            pass
+        return config
+    try:
+        with open(PERCENTILE_CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return None
+
+
+def load_log_for_date(date_str):
+    """Load log entries for a specific date"""
+    log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
+    if not os.path.exists(log_file):
+        return []
+    try:
+        with open(log_file, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+
+def _compute_day_event_samples(entries, day_date):
+    """For a day's entries, compute time-weighted metric samples.
+
+    Each eating event produces a snapshot of cumulative stats (cal/hr,
+    kcal/g protein, kcal/g fiber). The weight is the time until the
+    next eating event (or end of day).
+    """
+    sorted_entries = sorted(entries, key=lambda e: e.get('timestamp', ''))
+    if not sorted_entries:
+        return []
+
+    midnight = datetime.combine(day_date, datetime.min.time())
+    end_of_day = midnight + timedelta(hours=24)
+
+    samples = []
+    cum_cal = 0
+    cum_protein = 0
+    cum_fiber = 0
+
+    for i, entry in enumerate(sorted_entries):
+        cum_cal += entry.get('calories', 0)
+        cum_protein += entry.get('protein', 0)
+        cum_fiber += entry.get('fiber', 0)
+
+        try:
+            event_time = datetime.fromisoformat(entry['timestamp'])
+        except:
+            continue
+
+        hours_since_midnight = (event_time - midnight).total_seconds() / 3600
+        if hours_since_midnight <= 0:
+            hours_since_midnight = 0.1
+
+        cal_per_hour = cum_cal / hours_since_midnight
+        kcal_per_protein = cum_cal / cum_protein if cum_protein > 0 else None
+        kcal_per_fiber = cum_cal / cum_fiber if cum_fiber > 0 else None
+
+        # Weight = time until next event (or end of day)
+        if i + 1 < len(sorted_entries):
+            try:
+                next_time = datetime.fromisoformat(sorted_entries[i + 1]['timestamp'])
+                weight_hours = (next_time - event_time).total_seconds() / 3600
+            except:
+                weight_hours = 0.5
+        else:
+            weight_hours = (end_of_day - event_time).total_seconds() / 3600
+            weight_hours = min(weight_hours, 12)
+
+        weight_hours = max(weight_hours, 0.01)
+
+        samples.append(({
+            'cal_per_hour': cal_per_hour,
+            'kcal_per_protein': kcal_per_protein,
+            'kcal_per_fiber': kcal_per_fiber,
+        }, weight_hours))
+
+    return samples
+
+
+PERCENTILE_CACHE_FILE = os.path.join(LOGS_DIR, 'percentile_cache.json')
+
+# Bucket config: each metric gets fixed-width buckets
+# cal_per_hour: 0-1000 in steps of 10 (100 buckets)
+# kcal_per_protein: 0-50 in steps of 0.5 (100 buckets)
+# kcal_per_fiber: 0-500 in steps of 5 (100 buckets)
+PERCENTILE_METRICS = {
+    'kcal_per_protein': {'step': 0.5, 'count': 100},
+    'kcal_per_fiber': {'step': 5, 'count': 100},
+}
+
+_percentile_cache_mem = None
+
+
+def _bucket_index(metric, value):
+    """Get bucket index for a value."""
+    cfg = PERCENTILE_METRICS[metric]
+    return min(int(value / cfg['step']), cfg['count'] - 1)
+
+
+def _empty_cache():
+    """Create a fresh empty cache."""
+    cache = {
+        'timestamp': datetime.now().isoformat(),
+        'last_values': {},
+    }
+    for metric, cfg in PERCENTILE_METRICS.items():
+        cache[metric] = [0.0] * cfg['count']
+    return cache
+
+
+def _seed_cache_from_history(cache):
+    """One-time seed from historical logs (cutoff to yesterday)."""
+    pconfig = load_percentile_config()
+    if not pconfig:
+        return
+
+    cutoff_str = pconfig.get('cutoff')
+    if not cutoff_str:
+        return
+
+    cutoff_date = date.fromisoformat(cutoff_str)
+    today = date.today()
+
+    current = cutoff_date
+    while current < today:
+        entries = load_log_for_date(current.strftime('%Y-%m-%d'))
+        if entries:
+            for metrics, weight_hours in _compute_day_event_samples(entries, current):
+                weight_minutes = weight_hours * 60
+                for metric in PERCENTILE_METRICS:
+                    val = metrics.get(metric)
+                    if val is not None:
+                        idx = _bucket_index(metric, val)
+                        cache[metric][idx] += weight_minutes
+        current += timedelta(days=1)
+
+
+def _load_percentile_cache():
+    """Load from memory, disk, or create+seed a new cache."""
+    global _percentile_cache_mem
+
+    if _percentile_cache_mem is not None:
+        return _percentile_cache_mem
+
+    if os.path.exists(PERCENTILE_CACHE_FILE):
+        try:
+            with open(PERCENTILE_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+            _percentile_cache_mem = cache
+            return cache
+        except:
+            pass
+
+    # First run ever: create and seed
+    cache = _empty_cache()
+    _seed_cache_from_history(cache)
+    _save_percentile_cache(cache)
+    return cache
+
+
+def _save_percentile_cache(cache):
+    """Save to disk and memory."""
+    global _percentile_cache_mem
+    _percentile_cache_mem = cache
+    try:
+        with open(PERCENTILE_CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
+    except:
+        pass
+
+
+def _compute_today_metrics():
+    """Compute today's live metric values."""
+    log = load_today_log()
+    if not log:
+        return None
+
+    total_cal = sum(e.get('calories', 0) for e in log)
+    total_protein = sum(e.get('protein', 0) for e in log)
+    total_fiber = sum(e.get('fiber', 0) for e in log)
+
+    return {
+        'kcal_per_protein': total_cal / total_protein if total_protein > 0 else None,
+        'kcal_per_fiber': total_cal / total_fiber if total_fiber > 0 else None,
+    }
+
+
+def calculate_percentiles():
+    """Incrementally update the histogram with elapsed minutes, then look up percentiles."""
+    cache = _load_percentile_cache()
+    today_metrics = _compute_today_metrics()
+    if not today_metrics:
+        return None
+
+    now = datetime.now()
+
+    # Add elapsed minutes at the PREVIOUS values
+    try:
+        last_ts = datetime.fromisoformat(cache['timestamp'])
+        elapsed = (now - last_ts).total_seconds() / 60
+    except:
+        elapsed = 0
+
+    if elapsed > 0:
+        last_values = cache.get('last_values', {})
+        for metric in PERCENTILE_METRICS:
+            val = last_values.get(metric)
+            if val is not None:
+                idx = _bucket_index(metric, val)
+                cache[metric][idx] += elapsed
+
+    # Store current timestamp and values for next call
+    cache['timestamp'] = now.isoformat()
+    cache['last_values'] = {}
+    for metric in PERCENTILE_METRICS:
+        val = today_metrics.get(metric)
+        if val is not None:
+            cache['last_values'][metric] = round(val, 2)
+
+    _save_percentile_cache(cache)
+
+    # Look up percentiles: % of total time at HIGHER (worse) values
+    percentiles = {}
+    for metric in PERCENTILE_METRICS:
+        val = today_metrics.get(metric)
+        if val is None:
+            percentiles[metric] = None
+            continue
+
+        buckets = cache[metric]
+        total = sum(buckets)
+        if total <= 0:
+            percentiles[metric] = None
+            continue
+
+        idx = _bucket_index(metric, val)
+        worse_time = sum(buckets[idx + 1:])
+        percentiles[metric] = round(100 * worse_time / total)
+
+    return percentiles
+
 
 def validate_food_request(pad_key, food_key):
     """Validate that a pad and food key exist in the config"""
