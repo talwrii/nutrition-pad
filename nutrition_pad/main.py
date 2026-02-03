@@ -675,6 +675,9 @@ HTML_NUTRITION = """
             <div class="stat-card">
                 <div class="stat-value calories">{{ total_calories }} <span class="stat-rate">({{ cal_per_hour }}/h)</span></div>
                 <div class="stat-label">Calories</div>
+                {% if cal_delta and cal_delta != 0 %}
+                <div style="font-size:0.85em;font-weight:600;color:{{ '#4ecdc4' if cal_delta < 0 else '#ff6b6b' }};">{{ '%+d'|format(cal_delta) }}</div>
+                {% endif %}
             </div>
             <div class="stat-card">
                 <div class="stat-value protein">{{ total_protein }}g <span class="stat-rate">({{ protein_per_hour }}g/h)</span></div>
@@ -704,11 +707,17 @@ HTML_NUTRITION = """
                 <div class="stat-value ratio">{{ avg_ratio }}</div>
                 {% if percentiles and percentiles.kcal_per_protein is not none %}<div class="stat-pct">{{ percentiles.kcal_per_protein }}%</div>{% endif %}
                 <div class="stat-label">kcal/g Protein</div>
+                {% if cpp_delta is not none %}
+                <div style="font-size:0.85em;font-weight:600;color:{{ '#4ecdc4' if cpp_delta < 0 else '#ff6b6b' }};">{{ '%+.1f'|format(cpp_delta) }}</div>
+                {% endif %}
             </div>
             <div class="stat-card">
                 <div class="stat-value fiber-ratio">{{ kcal_per_fiber }}</div>
                 {% if percentiles and percentiles.kcal_per_fiber is not none %}<div class="stat-pct">{{ percentiles.kcal_per_fiber }}%</div>{% endif %}
                 <div class="stat-label">kcal/g Fiber</div>
+                {% if cpf_delta is not none %}
+                <div style="font-size:0.85em;font-weight:600;color:{{ '#4ecdc4' if cpf_delta < 0 else '#ff6b6b' }};">{{ '%+.1f'|format(cpf_delta) }}</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1155,9 +1164,33 @@ def nutrition_dashboard():
 
     server_time = datetime.now().isoformat()
     percentiles = calculate_percentiles() if is_today else None
+
+    # Compare to previous day at same time
+    prev_day = target_date - timedelta(days=1)
+    prev_entries = load_log_for_date(prev_day)
+    if is_today:
+        now_time = datetime.now().strftime('%H:%M')
+        prev_entries = [e for e in prev_entries if e.get('time', '00:00') <= now_time]
+
+    prev_cal = sum(e.get('calories', 0) for e in prev_entries)
+    prev_prot = sum(e.get('protein', 0) for e in prev_entries)
+    prev_fib = sum(e.get('fiber', 0) for e in prev_entries)
+
+    total_cal = stats['total_calories']
+    total_prot = float(stats['total_protein'])
+    total_fib = float(stats.get('total_fiber', 0))
+
+    cal_delta = round(total_cal - prev_cal)
+    curr_cpp = total_cal / total_prot if total_prot > 0 else 0
+    prev_cpp = prev_cal / prev_prot if prev_prot > 0 else 0
+    curr_cpf = total_cal / total_fib if total_fib > 0 else 0
+    prev_cpf = prev_cal / prev_fib if prev_fib > 0 else 0
+    cpp_delta = round(curr_cpp - prev_cpp, 1) if prev_prot > 0 and total_prot > 0 else None
+    cpf_delta = round(curr_cpf - prev_cpf, 1) if prev_fib > 0 and total_fib > 0 else None
+
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
-                                total_calories=stats['total_calories'],
+                                total_calories=total_cal,
                                 total_protein=stats['total_protein'],
                                 total_fiber=stats.get('total_fiber', 0),
                                 avg_ratio=stats['avg_ratio'],
@@ -1167,6 +1200,9 @@ def nutrition_dashboard():
                                 time_since_last_ate=time_since_last_ate,
                                 server_time=server_time,
                                 percentiles=percentiles,
+                                cal_delta=cal_delta,
+                                cpp_delta=cpp_delta,
+                                cpf_delta=cpf_delta,
                                 title=title,
                                 prev_date=prev_date,
                                 next_date=next_date,
