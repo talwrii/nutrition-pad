@@ -230,6 +230,23 @@ HTML_CALORIES = """
             color: rgba(255, 255, 255, 0.6);
             flex-shrink: 0;
         }
+        .window-row { cursor: pointer; }
+        .window-foods {
+            display: none;
+            margin: 0 0 8px 53px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            font-size: 0.8em;
+        }
+        .window-foods.open { display: block; }
+        .window-food-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        .window-food-item .wf-cal { color: #ff6b6b; }
 
         /* Entries list */
         .entries-section {
@@ -434,14 +451,24 @@ HTML_CALORIES = """
         <div class="graph-section" style="margin-bottom: 25px;">
             <div class="graph-title">Calories by 2-Hour Window</div>
             {% set wcum = namespace(value=0) %}
-            {% for label, cal in windows_sorted %}
-            {% set wcum.value = wcum.value + cal %}
-            <div class="window-row">
-                <div class="window-label">{{ label }}</div>
+            {% for wdata in windows_sorted %}
+            {% set wcum.value = wcum.value + wdata.cal %}
+            <div class="window-row" onclick="this.nextElementSibling.classList.toggle('open')">
+                <div class="window-label">{{ wdata.label }}</div>
                 <div class="window-bar-bg">
-                    <div class="window-bar" style="width: {{ (cal / max_window_cal * 100)|round }}%;"></div>
+                    <div class="window-bar" style="width: {{ (wdata.cal / max_window_cal * 100)|round }}%;"></div>
                 </div>
-                <div class="window-cal">{{ cal|round|int }} cal <span style="color:rgba(255,255,255,0.4);">{{ (cal / total_calories * 100)|round|int }}%</span> <span style="color:rgba(255,255,255,0.3);">{{ (wcum.value / total_calories * 100)|round|int }}%</span></div>
+                <div class="window-cal">{{ wdata.cal|round|int }} cal <span style="color:rgba(255,255,255,0.4);">{{ (wdata.cal / total_calories * 100)|round|int }}%</span> <span style="color:rgba(255,255,255,0.3);">{{ (wcum.value / total_calories * 100)|round|int }}%</span></div>
+            </div>
+            <div class="window-foods">
+                {% set fcum = namespace(value=0) %}
+                {% for food in wdata.foods %}
+                {% set fcum.value = fcum.value + food.calories %}
+                <div class="window-food-item">
+                    <span>{{ food.name }} <span style="color:rgba(255,255,255,0.3)">{{ food.amount_display }}</span></span>
+                    <span><span class="wf-cal">{{ food.calories|round|int }}</span> <span style="color:rgba(255,255,255,0.5);">{{ (fcum.value / wdata.cal * 100)|round|int }}%</span> <span style="color:rgba(255,255,255,0.35);">({{ (food.calories / wdata.cal * 100)|round|int }}%)</span> · <span style="color:#4ecdc4">{{ food.protein|round(1) }}g p</span> · <span style="color:#ffd93d">{{ food.fiber|round(1) }}g f</span></span>
+                </div>
+                {% endfor %}
             </div>
             {% endfor %}
         </div>
@@ -452,12 +479,12 @@ HTML_CALORIES = """
         <div class="graph-section" style="margin-bottom: 25px;">
             <div class="graph-title">Longest Fasting Gaps</div>
             {% for gap in top_fasts %}
-            <div class="window-row">
+            <div class="window-row" style="cursor: default;">
                 <div class="window-label">{{ gap.start }}</div>
                 <div class="window-bar-bg">
                     <div class="window-bar" style="width: {{ (gap.minutes / top_fasts[0].minutes * 100)|round }}%; background: linear-gradient(90deg, #4ecdc4, #2ab7ad);"></div>
                 </div>
-                <div class="window-cal" style="color:#4ecdc4;">{{ gap.duration }} <span style="color:rgba(255,255,255,0.4);">→ {{ gap.end }}</span></div>
+                <div class="window-cal" style="color:#4ecdc4;">{{ gap.duration }} <span style="color:rgba(255,255,255,0.4);">{{ gap.before_count }} ate → {{ gap.end }} ({{ gap.after_count }})</span></div>
             </div>
             {% endfor %}
         </div>
@@ -661,34 +688,53 @@ def register_calories_routes(app):
         # Entries sorted by calories descending
         entries_by_cal = sorted(entries, key=lambda e: e.get('calories', 0), reverse=True)
 
-        # Fasting gaps between entries (sorted by duration)
+        # Group entries into eating sessions (within 15 min of each other)
+        # then compute fasting gaps between sessions
         fasting_gaps = []
         if entries:
             sorted_by_time = sorted(entries, key=lambda e: e.get('time', '00:00'))
-            for i in range(len(sorted_by_time) - 1):
-                t1 = sorted_by_time[i].get('time', '00:00')
-                t2 = sorted_by_time[i + 1].get('time', '00:00')
+
+            def time_to_mins(t):
+                parts = t.split(':')
+                return int(parts[0]) * 60 + int(parts[1])
+
+            # Build sessions: groups of entries where consecutive entries are <= 15 min apart
+            sessions = []
+            current_session = [sorted_by_time[0]]
+            for i in range(1, len(sorted_by_time)):
+                t_prev = time_to_mins(sorted_by_time[i - 1].get('time', '00:00'))
+                t_curr = time_to_mins(sorted_by_time[i].get('time', '00:00'))
+                if t_curr - t_prev <= 15:
+                    current_session.append(sorted_by_time[i])
+                else:
+                    sessions.append(current_session)
+                    current_session = [sorted_by_time[i]]
+            sessions.append(current_session)
+
+            # Gaps between sessions
+            for i in range(len(sessions) - 1):
+                last_entry = sessions[i][-1]
+                first_entry = sessions[i + 1][0]
+                t1 = last_entry.get('time', '00:00')
+                t2 = first_entry.get('time', '00:00')
                 try:
-                    h1, m1 = int(t1.split(':')[0]), int(t1.split(':')[1])
-                    h2, m2 = int(t2.split(':')[0]), int(t2.split(':')[1])
-                    mins = (h2 * 60 + m2) - (h1 * 60 + m1)
+                    mins = time_to_mins(t2) - time_to_mins(t1)
                     if mins > 0:
                         hours = mins // 60
                         remaining = mins % 60
-                        if hours > 0:
-                            dur = f"{hours}h {remaining:02d}m"
-                        else:
-                            dur = f"{remaining}m"
+                        dur = f"{hours}h {remaining:02d}m" if hours > 0 else f"{remaining}m"
                         fasting_gaps.append({
                             'start': t1, 'end': t2,
                             'minutes': mins, 'duration': dur,
+                            'before_count': len(sessions[i]),
+                            'after_count': len(sessions[i + 1]),
                         })
                 except (ValueError, IndexError):
                     pass
         fasting_gaps.sort(key=lambda g: g['minutes'], reverse=True)
         top_fasts = fasting_gaps[:5]
 
-        # 2-hour window calorie breakdown
+        # 2-hour window calorie breakdown with food lists
         windows = {}
         for entry in entries:
             try:
@@ -697,9 +743,16 @@ def register_calories_routes(app):
                 hour = 12
             bucket = (hour // 2) * 2
             label = f"{bucket:02d}-{bucket+2:02d}"
-            windows[label] = windows.get(label, 0) + entry.get('calories', 0)
-        windows_sorted = sorted(windows.items(), key=lambda x: x[1], reverse=True)
-        max_window_cal = windows_sorted[0][1] if windows_sorted else 1
+            if label not in windows:
+                windows[label] = {'cal': 0, 'foods': []}
+            windows[label]['cal'] += entry.get('calories', 0)
+            windows[label]['foods'].append(entry)
+        # Sort foods within each window by calories desc
+        for w in windows.values():
+            w['foods'].sort(key=lambda e: e.get('calories', 0), reverse=True)
+        windows_sorted = [{'label': k, 'cal': v['cal'], 'foods': v['foods']}
+                          for k, v in sorted(windows.items(), key=lambda x: x[1]['cal'], reverse=True)]
+        max_window_cal = windows_sorted[0]['cal'] if windows_sorted else 1
 
         cal_per_protein = f"{total_calories / total_protein:.1f}" if total_protein > 0 else '--'
         cal_per_fiber = f"{total_calories / total_fiber:.1f}" if total_fiber > 0 else '--'

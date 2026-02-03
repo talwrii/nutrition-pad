@@ -11,4 +11,4 @@ This uses playwright.
 
 The app is installed locally with `pipx install -e .` so code changes take effect without reinstalling (unless there are new dependencies or entrypoints in pyproject.toml).
 
-A local server can be started with `nutrition-pad --port 9876`. Kill old instances first: `lsof -ti:9876 | xargs kill -9`.
+Run `./dev-server` to (re)start the local dev server on port 9876. It kills any existing instance first.
