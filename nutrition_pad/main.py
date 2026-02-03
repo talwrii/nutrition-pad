@@ -1,5 +1,5 @@
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import os
 import json
 import argparse
@@ -660,7 +660,15 @@ HTML_NUTRITION = """
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
-        <h1>Nutrition Dashboard</h1>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+            <a href="/nutrition?date={{ prev_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&larr;</a>
+            <h1 style="margin: 0;">{{ title }}</h1>
+            {% if not is_today %}
+            <a href="/nutrition?date={{ next_date }}" style="color: rgba(255,255,255,0.7); text-decoration: none; font-size: 1.5em; padding: 10px;">&rarr;</a>
+            {% else %}
+            <span style="width: 44px;"></span>
+            {% endif %}
+        </div>
     </div>
     <div class="nutrition-stats">
         <div class="stat-cards">
@@ -705,7 +713,7 @@ HTML_NUTRITION = """
         </div>
     </div>
     <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="window.location.href='/calories'" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
+        <button class="bottom-nav-btn" onclick="window.location.href='/calories{% if not is_today %}?date={{ current_date }}{% endif %}'" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
             <i class="fas fa-chart-line"></i> Timeline
         </button>
     </div>
@@ -1105,12 +1113,48 @@ def today_log():
 
 @app.route('/nutrition')
 def nutrition_dashboard():
-    log_entries = load_today_log()
-    stats = calculate_nutrition_stats()
-    time_since_last_ate = calculate_time_since_last_ate()
-    # Send server's current time for accurate client-side calculations
+    date_str = request.args.get('date')
+    if date_str:
+        try:
+            target_date = date.fromisoformat(date_str)
+        except ValueError:
+            target_date = date.today()
+    else:
+        target_date = date.today()
+
+    is_today = (target_date == date.today())
+    prev_date = (target_date - timedelta(days=1)).isoformat()
+    next_date = (target_date + timedelta(days=1)).isoformat()
+
+    if is_today:
+        title = "Nutrition Dashboard"
+    elif target_date == date.today() - timedelta(days=1):
+        title = "Yesterday"
+    else:
+        title = target_date.strftime('%a %d %b')
+
+    if is_today:
+        log_entries = load_today_log()
+        stats = calculate_nutrition_stats()
+        time_since_last_ate = calculate_time_since_last_ate()
+    else:
+        log_entries = load_log_for_date(target_date)
+        total_cal = sum(e.get('calories', 0) for e in log_entries)
+        total_prot = sum(e.get('protein', 0) for e in log_entries)
+        total_fib = sum(e.get('fiber', 0) for e in log_entries)
+        stats = {
+            'total_calories': round(total_cal),
+            'total_protein': round(total_prot, 1),
+            'total_fiber': round(total_fib, 1),
+            'avg_ratio': f"{total_cal / total_prot:.1f}" if total_prot > 0 else '--',
+            'cal_per_hour': '--',
+            'protein_per_hour': '--',
+            'kcal_per_fiber': f"{total_cal / total_fib:.1f}" if total_fib > 0 else '--',
+        }
+        time_since_last_ate = None
+
     server_time = datetime.now().isoformat()
-    percentiles = calculate_percentiles()
+    percentiles = calculate_percentiles() if is_today else None
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
                                 total_calories=stats['total_calories'],
@@ -1123,6 +1167,11 @@ def nutrition_dashboard():
                                 time_since_last_ate=time_since_last_ate,
                                 server_time=server_time,
                                 percentiles=percentiles,
+                                title=title,
+                                prev_date=prev_date,
+                                next_date=next_date,
+                                is_today=is_today,
+                                current_date=target_date.isoformat(),
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 
