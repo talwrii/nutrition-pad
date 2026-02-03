@@ -196,6 +196,11 @@ HTML_CALORIES = """
             color: rgba(255, 255, 255, 0.6);
             text-transform: uppercase;
         }
+        .stat-delta {
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 2px;
+        }
         
         /* Window bars */
         .window-row {
@@ -354,14 +359,29 @@ HTML_CALORIES = """
             <div class="stat-item">
                 <div class="stat-value calories">{{ total_calories }}</div>
                 <div class="stat-label">Calories</div>
+                {% if cal_delta != 0 %}
+                <div class="stat-delta" style="color: {{ '#4ecdc4' if cal_delta < 0 else '#ff6b6b' }};">
+                    {{ '%+d'|format(cal_delta) }}
+                </div>
+                {% endif %}
             </div>
             <div class="stat-item">
                 <div class="stat-value protein">{{ cal_per_protein }}</div>
                 <div class="stat-label">kcal/g protein</div>
+                {% if cpp_delta is not none %}
+                <div class="stat-delta" style="color: {{ '#4ecdc4' if cpp_delta < 0 else '#ff6b6b' }};">
+                    {{ '%+.1f'|format(cpp_delta) }}
+                </div>
+                {% endif %}
             </div>
             <div class="stat-item">
                 <div class="stat-value fiber">{{ cal_per_fiber }}</div>
                 <div class="stat-label">kcal/g fiber</div>
+                {% if cpf_delta is not none %}
+                <div class="stat-delta" style="color: {{ '#4ecdc4' if cpf_delta < 0 else '#ff6b6b' }};">
+                    {{ '%+.1f'|format(cpf_delta) }}
+                </div>
+                {% endif %}
             </div>
         </div>
         
@@ -757,6 +777,32 @@ def register_calories_routes(app):
         cal_per_protein = f"{total_calories / total_protein:.1f}" if total_protein > 0 else '--'
         cal_per_fiber = f"{total_calories / total_fiber:.1f}" if total_fiber > 0 else '--'
 
+        # Compare to previous day at the same time
+        prev_day = target_date - timedelta(days=1)
+        prev_entries = load_log_for_date(prev_day)
+        for e in prev_entries:
+            if 'fiber' not in e:
+                e['fiber'] = 0
+
+        if is_today:
+            # Filter previous day entries to only those up to current time
+            now_time = datetime.now().strftime('%H:%M')
+            prev_entries = [e for e in prev_entries if e.get('time', '00:00') <= now_time]
+
+        prev_cal = sum(e.get('calories', 0) for e in prev_entries)
+        prev_prot = sum(e.get('protein', 0) for e in prev_entries)
+        prev_fib = sum(e.get('fiber', 0) for e in prev_entries)
+
+        # Deltas
+        cal_delta = round(total_calories - prev_cal)
+        prev_cpp = prev_cal / prev_prot if prev_prot > 0 else 0
+        prev_cpf = prev_cal / prev_fib if prev_fib > 0 else 0
+        curr_cpp = total_calories / total_protein if total_protein > 0 else 0
+        curr_cpf = total_calories / total_fiber if total_fiber > 0 else 0
+        # For ratios, lower is better so delta sign is inverted for display
+        cpp_delta = round(curr_cpp - prev_cpp, 1) if prev_prot > 0 and total_protein > 0 else None
+        cpf_delta = round(curr_cpf - prev_cpf, 1) if prev_fib > 0 and total_fiber > 0 else None
+
         return render_template_string(HTML_CALORIES,
                                     entries=entries_by_cal,
                                     windows_sorted=windows_sorted,
@@ -765,6 +811,9 @@ def register_calories_routes(app):
                                     total_calories=round(total_calories),
                                     cal_per_protein=cal_per_protein,
                                     cal_per_fiber=cal_per_fiber,
+                                    cal_delta=cal_delta,
+                                    cpp_delta=cpp_delta,
+                                    cpf_delta=cpf_delta,
                                     calories_line_path=calories_line,
                                     calories_area_path=calories_area,
                                     protein_line_path=protein_ratio_line,
