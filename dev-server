@@ -4,13 +4,24 @@
 #        ./dev-server stop   - stop server
 set -e
 PORT=9876
+PIDFILE=/tmp/nutrition-pad-dev.pid
+
+kill_server() {
+    if [ -f "$PIDFILE" ]; then
+        pid=$(cat "$PIDFILE")
+        kill "$pid" 2>/dev/null && echo "Stopped (PID $pid)" || echo "Not running"
+        rm -f "$PIDFILE"
+    else
+        echo "Not running"
+    fi
+}
 
 if [ "$1" = "stop" ]; then
-    lsof -ti:$PORT | xargs kill -9 2>/dev/null && echo "Stopped" || echo "Not running"
+    kill_server
     exit 0
 fi
 
-lsof -ti:$PORT | xargs kill -9 2>/dev/null || true
+kill_server 2>/dev/null || true
 sleep 0.5
-nutrition-pad --port $PORT > /tmp/nutrition-pad-server.log 2>&1 &
+nutrition-pad --port $PORT --pidfile "$PIDFILE" > /tmp/nutrition-pad-server.log 2>&1 &
 echo "Dev server started on http://localhost:$PORT (PID $!)"

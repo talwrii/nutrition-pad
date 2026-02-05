@@ -19,6 +19,7 @@ from .data import (
 from .styles import register_styles_routes
 from .notes import register_notes_routes
 from .calories import register_calories_routes
+from .meals import register_meals_routes, load_meals, calculate_meal_totals
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -213,7 +214,74 @@ HTML_INDEX = """
         setDebugMode({{ 'true' if js_debug else 'false' }});
         // Amounts functionality
         {{ amounts_javascript|safe }}
+
+        // --- Meal mode (food pads side: intercept clicks) ---
+        var mealMode = false;
+
+        function getCurrentAmountVal() {
+            var amountEl = document.querySelector('.current-amount');
+            if (amountEl) {
+                var parsed = parseFloat(amountEl.textContent || amountEl.innerText);
+                if (!isNaN(parsed)) return parsed;
+            }
+            return {{ current_amount }};
+        }
+
+        function addToMeal(padKey, foodKey) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/foods/' + padKey + '/' + foodKey, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText);
+                    var food = data.food;
+                    var item = {
+                        pad: padKey,
+                        food: foodKey,
+                        name: food.display_name || food.name || foodKey,
+                        type: food.type || 'amount'
+                    };
+                    if (food.type === 'unit') {
+                        item.calories = food.calories || 0;
+                        item.protein = food.protein || 0;
+                        item.fiber = food.fiber || 0;
+                    } else {
+                        item.amount = getCurrentAmountVal();
+                        item.calories_per_gram = food.calories_per_gram || 0;
+                        item.protein_per_gram = food.protein_per_gram || 0;
+                        item.fiber_per_gram = food.fiber_per_gram || 0;
+                    }
+                    var items = [];
+                    try { items = JSON.parse(sessionStorage.getItem('mealItems') || '[]'); } catch(e) {}
+                    items.push(item);
+                    sessionStorage.setItem('mealItems', JSON.stringify(items));
+                    // Update indicator count
+                    var ind = document.getElementById('meal-mode-indicator');
+                    if (ind) ind.textContent = 'Building Meal \u2014 ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' added';
+                }
+            };
+            xhr.send();
+        }
+
+        function restoreMealMode() {
+            if (sessionStorage.getItem('mealMode') === '1') {
+                mealMode = true;
+                var ind = document.getElementById('meal-mode-indicator');
+                if (ind) {
+                    ind.style.display = 'block';
+                    var items = [];
+                    try { items = JSON.parse(sessionStorage.getItem('mealItems') || '[]'); } catch(e) {}
+                    if (items.length > 0) {
+                        ind.textContent = 'Building Meal \u2014 ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' added';
+                    }
+                }
+            }
+        }
+
         function logFood(padKey, foodKey) {
+            if (mealMode) {
+                addToMeal(padKey, foodKey);
+                return;
+            }
             var nonce = generateNonce();
             debug('Logging food with nonce: ' + nonce);
             setMyNonce(nonce);
@@ -236,6 +304,31 @@ HTML_INDEX = """
                 nonce: nonce
             }));
         }
+        function logMeal(mealId) {
+            var nonce = generateNonce();
+            debug('Logging meal with nonce: ' + nonce);
+            setMyNonce(nonce);
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/log-meal', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    debug('Meal logged successfully');
+                    var itemCountEl = document.querySelector('.item-count');
+                    if (itemCountEl) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            var currentCount = parseInt(itemCountEl.textContent) || 0;
+                            itemCountEl.textContent = (currentCount + data.items_logged + 1) + ' items logged today';
+                        } catch (e) {}
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({
+                meal_id: mealId,
+                nonce: nonce
+            }));
+        }
         function showTodayLog() {
             window.location.href = '/today';
         }
@@ -255,6 +348,7 @@ HTML_INDEX = """
                     createPresetButtons();
                 }
             }
+            restoreMealMode();
             startLongPolling();
         };
     </script>
@@ -272,6 +366,9 @@ HTML_INDEX = """
         <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged today</div>
     </div>
+    <div id="meal-mode-indicator" style="display:none; text-align:center; padding:8px; background:rgba(78,205,196,0.15); border-bottom:2px solid rgba(78,205,196,0.4); color:#4ecdc4; font-weight:600;">
+        Building Meal &mdash; click foods to add
+    </div>
     <div class="nav-tabs">
         {% for pad_key, pad_data in pads.items() %}
         {% if pad_key != 'amounts' %}
@@ -281,9 +378,40 @@ HTML_INDEX = """
         </a>
         {% endif %}
         {% endfor %}
+        <a class="tab-btn {% if current_pad == 'meals' %}active{% endif %}"
+           href="/?pad=meals">
+            Meals
+        </a>
     </div>
     {% if current_pad == 'amounts' %}
     {{ amounts_content|safe }}
+    {% elif current_pad == 'meals' %}
+    <div id="food-grid" class="food-grid">
+        {% if meals_list %}
+            {% for meal in meals_list %}
+            <div class="food-btn unit-food"
+                 data-food-id="meal_{{ meal.id }}"
+                 style="background: {{ hash_color('meal_' + meal.id) }}"
+                 onclick="logMeal('{{ meal.id }}')">
+                <div class="food-btn-inner">
+                    <div class="food-type-indicator">{{ meal.total_cal }} kcal</div>
+                    <div class="food-name">{{ meal.name }}</div>
+                </div>
+            </div>
+            {% endfor %}
+            <div class="food-btn" style="background: rgba(255,255,255,0.1); border: 2px dashed rgba(255,255,255,0.3);"
+                 onclick="startMealMode()">
+                <div class="food-btn-inner">
+                    <div class="food-name" style="font-size: 1.5em;">+ New Meal</div>
+                </div>
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">
+                <p style="font-size: 1.2em;">No meals defined yet</p>
+                <a href="javascript:startMealMode()" style="color: #4ecdc4; font-size: 1.1em;">Create your first meal</a>
+            </div>
+        {% endif %}
+    </div>
     {% else %}
     <div id="food-grid" class="food-grid">
         {% if current_pad_data and current_pad_data.foods %}
@@ -348,7 +476,7 @@ HTML_TODAY = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .notes-link, .food-link {
+        .settings-cog, .notes-link, .food-link, .meal-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -374,6 +502,14 @@ HTML_TODAY = """
         .food-link:hover {
             transform: scale(1.2);
             filter: drop-shadow(0 0 8px rgba(255, 100, 100, 0.6));
+        }
+        .meal-link:hover {
+            color: #4ecdc4;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+        }
+        .meal-link.active {
+            color: #4ecdc4;
         }
         .log-item {
             position: relative;
@@ -449,7 +585,18 @@ HTML_TODAY = """
             };
             xhr.send();
         }
+        // Check if meal mode is active and show indicator
+        function checkMealMode() {
+            if (sessionStorage.getItem('mealMode') === '1') {
+                var ind = document.getElementById('meal-active-indicator');
+                if (ind) ind.style.display = 'block';
+                var link = document.querySelector('.meal-link');
+                if (link) link.style.color = '#4ecdc4';
+            }
+        }
+
         window.onload = function() {
+            checkMealMode();
             simplePoll();
         };
     </script>
@@ -458,6 +605,7 @@ HTML_TODAY = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/meals/build" class="meal-link" title="New Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
@@ -473,6 +621,9 @@ HTML_TODAY = """
         <div class="total-protein">{{ total_protein }}g protein</div>
         <div class="cal-per-protein">{{ avg_ratio }} kcal/g protein</div>
         <div class="item-count">{{ item_count }} items logged</div>
+    </div>
+    <div id="meal-active-indicator" style="display:none; text-align:center; padding:10px; background:rgba(78,205,196,0.15); border-bottom:2px solid rgba(78,205,196,0.4); color:#4ecdc4; font-weight:600;">
+        <a href="/meals/build" style="color:#4ecdc4; text-decoration:none;">Meal active &mdash; tap to view</a>
     </div>
     <div class="log-container">
         {% if log_entries %}
@@ -645,9 +796,16 @@ HTML_NUTRITION = """
                 console.error('Error updating time since ate:', e);
             }
         }
+        function checkMealMode() {
+            if (sessionStorage.getItem('mealMode') === '1') {
+                var ind = document.getElementById('meal-active-indicator');
+                if (ind) ind.style.display = 'block';
+            }
+        }
         window.onload = function() {
             startLongPolling();
             updateTimeSinceAte();
+            checkMealMode();
             // Update time display every 30 seconds for accuracy
             setInterval(updateTimeSinceAte, 30000);
         };
@@ -669,6 +827,9 @@ HTML_NUTRITION = """
             <span style="width: 44px;"></span>
             {% endif %}
         </div>
+    </div>
+    <div id="meal-active-indicator" style="display:none; text-align:center; padding:10px; background:rgba(78,205,196,0.15); border-bottom:2px solid rgba(78,205,196,0.4); color:#4ecdc4; font-weight:600;">
+        <a href="/meals/build" style="color:#4ecdc4; text-decoration:none;">Meal active &mdash; tap to view</a>
     </div>
     <div class="nutrition-stats">
         <div class="stat-cards">
@@ -1033,7 +1194,7 @@ def index():
     # Get current pad from URL parameter
     current_pad = request.args.get('pad', None)
     # If no pad specified or invalid pad, default to first available pad or amounts
-    if not current_pad or current_pad not in pads:
+    if not current_pad or (current_pad not in pads and current_pad != 'meals'):
         # Find first non-amounts pad
         for pad_key in pads.keys():
             if pad_key != 'amounts':
@@ -1064,6 +1225,19 @@ def index():
             first_pad_key = pad_key
             break
     is_first_pad = (current_pad == first_pad_key)
+    # Load meals for the meals tab
+    meals_list = []
+    if current_pad == 'meals':
+        raw_meals = load_meals()
+        for m in raw_meals:
+            total_cal, total_protein = calculate_meal_totals(m)
+            meals_list.append({
+                'id': m['id'],
+                'name': m['name'],
+                'total_cal': total_cal,
+                'total_protein': total_protein,
+                'item_count': len(m.get('items', []))
+            })
     return render_template_string(HTML_INDEX,
                                 pads=pads,
                                 current_pad=current_pad,
@@ -1075,6 +1249,7 @@ def index():
                                 current_amount=current_amount_display,
                                 amounts_content=amounts_content,
                                 amounts_javascript=amounts_javascript,
+                                meals_list=meals_list,
                                 hash_color=hash_color,
                                 js_debug=app.config.get('JS_DEBUG', False))
 
@@ -1655,7 +1830,7 @@ def api_resolve_unknown():
     updated_count = 0
     updated_entries = []
     for filename in sorted(os.listdir(LOGS_DIR), reverse=True):
-        if not filename.endswith('.json') or filename.endswith('_notes.json'):
+        if not filename.endswith('.json') or filename.endswith('_notes.json') or not filename[0].isdigit():
             continue
         filepath = os.path.join(LOGS_DIR, filename)
         try:
@@ -1712,6 +1887,7 @@ register_polling_routes(app)
 register_styles_routes(app)
 register_notes_routes(app)
 register_calories_routes(app)
+register_meals_routes(app)
 
 
 # --- MAIN ---

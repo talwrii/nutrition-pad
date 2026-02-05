@@ -11,6 +11,7 @@ import string
 from datetime import datetime, date, timedelta
 
 CONFIG_FILE = 'foods.toml'
+MEALS_FILE = 'meals.json'
 LOGS_DIR = 'daily_logs'
 
 # Hardcoded unknown food definitions
@@ -228,21 +229,21 @@ def backfill_all_logs():
     
     return files_modified
 
-def save_food_entry(pad_key, food_key, food_data, amount=None):
+def save_food_entry(pad_key, food_key, food_data, amount=None, meal_uid=None):
     """Save a food entry to today's log with specified amount or unit"""
     log_file = get_today_log_file()
-    
+
     entries = load_today_log()
     backfill_entry_ids(entries)
-    
+
     now = datetime.now()
     timestamp = now.isoformat()
     time_str = now.strftime('%H:%M')
-    
+
     entry_id = generate_entry_id()
-    
+
     scale = food_data.get('scale', 1.0)
-    
+
     if food_data.get('type') == 'unit':
         calories = food_data.get('calories', 0) * scale
         protein = food_data.get('protein', 0) * scale
@@ -257,7 +258,7 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
         fiber = food_data.get('fiber_per_gram', 0) * amount * scale
         amount_display = f"{amount}g"
         entry_amount = amount
-    
+
     entry = {
         'id': entry_id,
         'time': time_str,
@@ -271,12 +272,15 @@ def save_food_entry(pad_key, food_key, food_data, amount=None):
         'fiber': round(fiber, 1),
         'timestamp': timestamp
     }
-    
+
+    if meal_uid:
+        entry['meal_uid'] = meal_uid
+
     entries.append(entry)
-    
+
     with open(log_file, 'w') as f:
         json.dump(entries, f, indent=2)
-    
+
     return entry
 
 def calculate_daily_total():

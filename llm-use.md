@@ -4,7 +4,8 @@
 A common part of tracking food is not having an existing entry in the food database for a food. Having to immediately create an entry while calorie tracking can contribute to fatigue, or simply be impossible. We provide a system to delay the entry of a food with so-called "unknowns". This lets us create an entry that we file in later along with notes about the food.
 
 You can run `nutrition-notes` to get the entries with an unknown food. Nearby notes inform you about what the entry probably is.  We want to have no unknown entries for the last couple of days.
-You can use the internet to get nutrition inforation about a food. Prefer more recent entries. Try to find two sources that match.
+You can use the internet to get nutrition inforation about a food. Prefer more recent entries. Try to find two sources that match. Prefer direct entries from menus.
+
 
 Once you create the food fo the unknown or otherwise find the food, you can use `nutrition-unkonwn` to add a food to an unknown entry.
 
