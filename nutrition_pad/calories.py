@@ -520,7 +520,7 @@ HTML_CALORIES = """
                 <div class="entry-item">
                     <div class="entry-time">{{ entry.time }}</div>
                     <div class="entry-food">
-                        {{ entry.name }}
+                        {% if entry.count > 1 %}{{ entry.count }}x {% endif %}{{ entry.name }}
                         <span class="amount">{{ entry.amount_display }}</span>
                     </div>
                     <div class="entry-calories">{{ entry.calories|round|int }} cal <span style="color:rgba(255,255,255,0.4);">({{ (entry.calories / total_calories * 100)|round|int }}%)</span></div>
@@ -705,8 +705,29 @@ def register_calories_routes(app):
         # Build entry dots for the calorie line
         entry_dots = build_entry_dots(entries, max_calories)
 
+        # Group consecutive entries with the same food key
+        grouped = []
+        for entry in entries:
+            if grouped and grouped[-1].get('food') == entry.get('food'):
+                g = grouped[-1]
+                g['calories'] = round(g['calories'] + entry.get('calories', 0), 1)
+                g['protein'] = round(g['protein'] + entry.get('protein', 0), 1)
+                g['fiber'] = round(g['fiber'] + entry.get('fiber', 0), 1)
+                g['count'] = g.get('count', 1) + 1
+                if entry.get('type') == 'amount' or 'g' in str(entry.get('amount_display', '')):
+                    old_amt = g.get('amount', 0)
+                    new_amt = old_amt + entry.get('amount', 0)
+                    g['amount'] = new_amt
+                    g['amount_display'] = f"{new_amt}g"
+                else:
+                    g['amount_display'] = f"{g['count']} units"
+            else:
+                g = dict(entry)
+                g['count'] = 1
+                grouped.append(g)
+
         # Entries sorted by calories descending
-        entries_by_cal = sorted(entries, key=lambda e: e.get('calories', 0), reverse=True)
+        entries_by_cal = sorted(grouped, key=lambda e: e.get('calories', 0), reverse=True)
 
         # Group entries into eating sessions (within 15 min of each other)
         # then compute fasting gaps between sessions

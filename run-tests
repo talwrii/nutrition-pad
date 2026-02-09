@@ -58,16 +58,18 @@ if [ -f tests/test_dashboard_refresh.py ]; then
     python3 tests/test_dashboard_refresh.py "http://127.0.0.1:$TEST_PORT"
 fi
 
-# Stop server before CLI tests
-kill $SERVER_PID 2>/dev/null || true
-SERVER_PID=""
-
-# CLI tests
+# CLI tests (server still running)
 echo "▶ CLI tests..."
 python3 tests/test_nutrition_food_cli.py
 python3 tests/test_nutrition_unknown_cli.py
 python3 tests/test_api_routes.py
 python3 tests/test_entries_api.py
+
+# Integration tests against running server
+if [ -f tests/test_backdate_entry.py ]; then
+    echo "▶ Backdate entry test..."
+    python3 tests/test_backdate_entry.py
+fi
 
 echo ""
 echo "═══════════════════════════════════════════════"

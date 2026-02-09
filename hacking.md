@@ -1,6 +1,10 @@
 There is a script to take screenshots. This is useful for vaguely testing what is going on.
 This uses playwright.
 
+# Testing
+
+Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all tests, cleans up. Uses `.venv-release` (created by first `./release` run).
+
 # Releasing and deploying
 
 1. Bump version in `pyproject.toml`

@@ -229,16 +229,30 @@ def backfill_all_logs():
     
     return files_modified
 
-def save_food_entry(pad_key, food_key, food_data, amount=None, meal_uid=None):
-    """Save a food entry to today's log with specified amount or unit"""
-    log_file = get_today_log_file()
+def save_food_entry(pad_key, food_key, food_data, amount=None, meal_uid=None, at_timestamp=None):
+    """Save a food entry to a log with specified amount or unit.
 
-    entries = load_today_log()
+    Args:
+        at_timestamp: Optional datetime or ISO string for backdated entries.
+                      If provided, saves to that date's log file instead of today's.
+    """
+    if at_timestamp:
+        if isinstance(at_timestamp, str):
+            entry_dt = datetime.fromisoformat(at_timestamp)
+        else:
+            entry_dt = at_timestamp
+        date_str = entry_dt.strftime('%Y-%m-%d')
+        log_file = os.path.join(LOGS_DIR, f'{date_str}.json')
+        entries = load_log_for_date(date_str) if os.path.exists(log_file) else []
+    else:
+        log_file = get_today_log_file()
+        entries = load_today_log()
+        entry_dt = datetime.now()
+
     backfill_entry_ids(entries)
 
-    now = datetime.now()
-    timestamp = now.isoformat()
-    time_str = now.strftime('%H:%M')
+    timestamp = entry_dt.isoformat()
+    time_str = entry_dt.strftime('%H:%M')
 
     entry_id = generate_entry_id()
 

@@ -6,11 +6,13 @@ Usage:
     nutrition-record <food_key>              # Record 1 unit or default amount
     nutrition-record <food_key> <count>      # Record N units (for unit foods)
     nutrition-record <food_key> <amount>     # Record N grams (for amount foods)
+    nutrition-record --at 2026-02-08T12:30 <food_key>  # Backdate entry
 
 Examples:
     nutrition-record celery                  # 1 celery stick
     nutrition-record celery 5                # 5 celery sticks
     nutrition-record chicken_breast 150      # 150g chicken breast
+    nutrition-record --at 2026-02-08T18:00 kfc-mini-fillet  # Backdated
 """
 import os
 import sys
@@ -70,11 +72,14 @@ def main():
     parser.add_argument('food_key', help='Food key to record')
     parser.add_argument('count', nargs='?', type=int, default=1,
                        help='Count (for unit foods) or amount in grams (for amount foods)')
+    parser.add_argument('--at', dest='at_timestamp', metavar='TIMESTAMP',
+                       help='Backdate entry (format: YYYY-MM-DDTHH:MM, e.g. 2026-02-08T12:30)')
 
     args = parser.parse_args()
 
     food_key = args.food_key
     count = args.count
+    at_timestamp = args.at_timestamp
 
     # Load server config
     server_config = load_server_config()
@@ -102,11 +107,15 @@ def main():
     for i in range(count):
         nonce = generate_nonce()
 
-        log_result = post_to_server(server, '/log', {
+        payload = {
             'pad': pad_key,
             'food': food_key,
             'nonce': nonce
-        })
+        }
+        if at_timestamp:
+            payload['at'] = at_timestamp
+
+        log_result = post_to_server(server, '/log', payload)
 
         if log_result is None or log_result.get('status') != 'success':
             print(f"❌ Failed to record entry {i+1}/{count}", file=sys.stderr)
@@ -126,7 +135,10 @@ def main():
         total_protein = protein_per_gram * count
         amount_str = f"{count}g"
 
-    print(f"✅ Recorded {count}x {food_name}")
+    if at_timestamp:
+        print(f"✅ Recorded {count}x {food_name} at {at_timestamp}")
+    else:
+        print(f"✅ Recorded {count}x {food_name}")
     print(f"   {amount_str}: {total_calories:.0f} cal, {total_protein:.1f}g protein")
 
     return 0

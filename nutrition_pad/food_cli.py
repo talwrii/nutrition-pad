@@ -379,7 +379,17 @@ def cmd_edit(args):
 
 
 def cmd_add(args):
-    """Add food from stdin TOML"""
+    """Add food from stdin TOML.
+
+    TOML must use full path format: [pads.<pad_key>.foods.<food_key>]
+
+    Example:
+        [pads.other.foods.my-new-food]
+        name = "My New Food"
+        type = "unit"
+        calories = 100
+        protein = 10
+    """
     # Read TOML from stdin
     print("Enter TOML configuration (Ctrl+D when done):", file=sys.stderr)
     toml_content = sys.stdin.read()
@@ -443,7 +453,7 @@ def main():
     edit_parser = subparsers.add_parser('edit', help='Edit foods.toml in $EDITOR')
 
     # Add command
-    add_parser = subparsers.add_parser('add', help='Add food from stdin TOML')
+    add_parser = subparsers.add_parser('add', help='Add food from stdin TOML (format: [pads.<pad>.foods.<key>])')
 
     args = parser.parse_args()
 
