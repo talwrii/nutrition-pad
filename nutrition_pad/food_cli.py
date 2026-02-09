@@ -455,6 +455,9 @@ def main():
     # Add command
     add_parser = subparsers.add_parser('add', help='Add food from stdin TOML (format: [pads.<pad>.foods.<key>])')
 
+    # Replace-all command
+    replace_all_parser = subparsers.add_parser('replace-all', help='Replace entire foods.toml from stdin')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -477,8 +480,46 @@ def main():
         return cmd_edit(args)
     elif args.command == 'add':
         return cmd_add(args)
+    elif args.command == 'replace-all':
+        return cmd_replace_all(args)
     else:
         parser.print_help()
+        return 1
+
+
+def cmd_replace_all(args):
+    """Replace entire foods.toml config from stdin"""
+    print("Enter complete TOML configuration (Ctrl+D when done):", file=sys.stderr)
+    toml_content = sys.stdin.read()
+
+    if not toml_content.strip():
+        print("Error: No TOML content provided", file=sys.stderr)
+        return 1
+
+    # Parse TOML to validate
+    try:
+        import toml
+        parsed = toml.loads(toml_content)
+        if 'pads' not in parsed:
+            print("Error: Invalid config - missing 'pads' section", file=sys.stderr)
+            return 1
+    except Exception as e:
+        print(f"Error parsing TOML: {e}", file=sys.stderr)
+        return 1
+
+    server = get_server()
+    result = post_to_server(server, '/api/foods/replace-all', {'toml_content': toml_content})
+
+    if result is None:
+        return 1
+
+    if result.get('success'):
+        print(f"Config replaced successfully!")
+        if result.get('backup'):
+            print(f"   Backup saved: {result['backup']}")
+        return 0
+    else:
+        print(f"Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
         return 1
 
 if __name__ == '__main__':

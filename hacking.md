@@ -3,13 +3,13 @@ This uses playwright.
 
 # Testing
 
-Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all tests, cleans up. Uses `.venv-release` (created by first `./release` run).
+Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all tests, cleans up. Uses `.venv-release` (created by first `./release` run). Note: `./release` runs the full test suite automatically, so running tests separately is optional.
 
 # Releasing and deploying
 
 1. Bump version in `pyproject.toml`
 2. Commit all changes (release script requires clean working tree)
-3. Run `./release` — runs tests, pushes to git, tags, builds, uploads to PyPI
+3. Run `./release` — runs full test suite, pushes to git, tags, builds, uploads to PyPI
 4. Run `./deploy/deploy` — SSHs to the server, pip upgrades, restarts the systemd service
 
 # Local development

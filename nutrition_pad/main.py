@@ -430,7 +430,7 @@ HTML_INDEX = """
             </div>
             {% endif %}
             {% endfor %}
-            {% if is_first_pad %}
+            {% if current_pad == 'other' %}
             <div class="food-btn amount-food" data-food-id="_unknown_amount" style="background: {{ hash_color('_unknown_amount') }}" onclick="logFood('_unknown', 'amount')">
                 <div class="food-btn-inner">
                     <div class="food-type-indicator">{{ current_amount }}g</div>
@@ -1789,6 +1789,39 @@ def api_foods_add():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error saving config: {str(e)}'}), 500
+
+
+@app.route('/api/foods/replace-all', methods=['POST'])
+def api_foods_replace_all():
+    """API endpoint to replace entire foods.toml config"""
+    data = request.json
+    if not data or 'toml_content' not in data:
+        return jsonify({'success': False, 'error': 'No toml_content provided'}), 400
+
+    toml_content = data['toml_content']
+
+    try:
+        # Validate TOML
+        parsed = toml.loads(toml_content)
+        if 'pads' not in parsed:
+            return jsonify({'success': False, 'error': 'Invalid config: missing pads section'}), 400
+
+        # Backup current config
+        import shutil
+        from datetime import datetime
+        backup_file = CONFIG_FILE + '.backup.' + datetime.now().strftime('%Y%m%d_%H%M%S')
+        if os.path.exists(CONFIG_FILE):
+            shutil.copy2(CONFIG_FILE, backup_file)
+
+        # Write new config
+        with open(CONFIG_FILE, 'w') as f:
+            f.write(toml_content)
+
+        mark_updated("replace_all_foods")
+        return jsonify({'success': True, 'backup': backup_file})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error: {str(e)}'}), 500
 
 
 @app.route('/api/foods/deactivate', methods=['POST'])
