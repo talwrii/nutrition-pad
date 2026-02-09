@@ -492,6 +492,67 @@ def test_meal_mode_intercept_on_index():
     return ok
 
 
+def test_meal_mode_server_sync():
+    """Test that meal mode syncs via server to all clients"""
+    print("\n🧪 Test: meal mode server sync")
+
+    app.config['TESTING'] = True
+    client = app.test_client()
+
+    ok = True
+
+    # Initially meal mode should be off
+    response = client.get('/poll-updates?since=0&amount_since=0')
+    if response.status_code != 200:
+        print(f"  ❌ Poll failed: {response.status_code}")
+        return False
+    data = response.get_json()
+    if data.get('meal_mode') != False:
+        print(f"  ❌ Initial meal_mode should be False, got: {data.get('meal_mode')}")
+        ok = False
+    else:
+        print("  ✓ Initial meal_mode is False")
+
+    # Set meal mode on
+    response = client.post('/set-meal-mode', json={'active': True})
+    if response.status_code != 200:
+        print(f"  ❌ Set meal mode failed: {response.status_code}")
+        return False
+    data = response.get_json()
+    if data.get('meal_mode') != True:
+        print(f"  ❌ Response meal_mode should be True, got: {data.get('meal_mode')}")
+        ok = False
+    else:
+        print("  ✓ Set meal_mode to True")
+
+    # Poll should now show meal mode on
+    response = client.get('/poll-updates?since=0&amount_since=0')
+    data = response.get_json()
+    if data.get('meal_mode') != True:
+        print(f"  ❌ Poll meal_mode should be True, got: {data.get('meal_mode')}")
+        ok = False
+    else:
+        print("  ✓ Poll returns meal_mode=True")
+
+    # Set meal mode off
+    response = client.post('/set-meal-mode', json={'active': False})
+    if response.status_code != 200:
+        print(f"  ❌ Set meal mode off failed: {response.status_code}")
+        return False
+    print("  ✓ Set meal_mode to False")
+
+    # Poll should show meal mode off
+    response = client.get('/poll-updates?since=0&amount_since=0')
+    data = response.get_json()
+    if data.get('meal_mode') != False:
+        print(f"  ❌ Poll meal_mode should be False, got: {data.get('meal_mode')}")
+        ok = False
+    else:
+        print("  ✓ Poll returns meal_mode=False after disabling")
+
+    return ok
+
+
 def run_all_tests():
     """Run all tests"""
     print("\n" + "=" * 60)
@@ -517,6 +578,7 @@ def run_all_tests():
             test_meals_tab_on_index,
             test_meal_active_indicator_on_pages,
             test_meal_mode_intercept_on_index,
+            test_meal_mode_server_sync,
         ]
 
         results = []

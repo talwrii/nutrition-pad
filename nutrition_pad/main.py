@@ -274,6 +274,8 @@ HTML_INDEX = """
                         ind.textContent = 'Building Meal \u2014 ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' added';
                     }
                 }
+                // Change background to indicate meal mode (cyan-tinted)
+                document.body.style.background = 'linear-gradient(135deg, #1a2a2e 0%, #163e3e 50%, #0f4660 100%)';
             }
         }
 
@@ -358,6 +360,7 @@ HTML_INDEX = """
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
             <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
@@ -605,7 +608,8 @@ HTML_TODAY = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
-            <a href="/meals/build" class="meal-link" title="New Meal"><i class="fas fa-utensils"></i></a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
@@ -815,6 +819,8 @@ HTML_NUTRITION = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
@@ -1059,6 +1065,8 @@ HTML_FOOD_EDITOR = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>

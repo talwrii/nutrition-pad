@@ -338,7 +338,8 @@ HTML_CALORIES = """
     <div class="header">
         <div class="header-icons">
             <a href="/" class="food-link" title="Food Pads">🍎</a>
-            <a href="/nutrition" class="notes-link" title="Dashboard"><i class="fas fa-chart-pie"></i></a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
             <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
             <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>

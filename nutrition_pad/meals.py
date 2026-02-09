@@ -67,6 +67,12 @@ HTML_MEALS_BUILD = """
     <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        body {
+            background: linear-gradient(135deg, #1a2a2e 0%, #163e3e 50%, #0f4660 100%);
+            min-height: 100vh;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
         .header-icons {
             display: flex;
             justify-content: center;
@@ -231,6 +237,7 @@ HTML_MEALS_BUILD = """
                         sessionStorage.removeItem('mealMode');
                         sessionStorage.removeItem('mealItems');
                         sessionStorage.removeItem('mealName');
+                        setServerMealMode(false);
                         window.location.href = '/?pad=meals';
                     } else {
                         alert('Error saving meal');
@@ -245,12 +252,21 @@ HTML_MEALS_BUILD = """
             sessionStorage.removeItem('mealMode');
             sessionStorage.removeItem('mealItems');
             sessionStorage.removeItem('mealName');
+            setServerMealMode(false);
             window.location.href = '/today';
         }
 
+        function setServerMealMode(active) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/set-meal-mode', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify({ active: active }));
+        }
+
         window.onload = function() {
-            // Activate meal mode
+            // Activate meal mode (local + server)
             sessionStorage.setItem('mealMode', '1');
+            setServerMealMode(true);
             // Restore name
             var nameInput = document.getElementById('meal-name');
             if (nameInput) {
@@ -265,8 +281,11 @@ HTML_MEALS_BUILD = """
 <body>
     <div class="header">
         <div class="header-icons">
-            <a href="/" title="Food Pads">🍎</a>
-            <a href="/today" title="Today's Log"><i class="fas fa-list"></i></a>
+            <a href="/" class="food-link" title="Food Pads">🍎</a>
+            <a href="/?pad=amounts" class="amounts-link" title="Set Amount"><i class="fas fa-ruler"></i></a>
+            <a href="/meals/build" class="meal-link" title="Build Meal"><i class="fas fa-utensils"></i></a>
+            <a href="/notes" class="notes-link" title="Food Notes"><i class="fas fa-sticky-note"></i></a>
+            <a href="/edit-foods" class="settings-cog" title="Edit Foods Configuration"><i class="fas fa-cog"></i></a>
         </div>
         <h1 style="color: #4ecdc4;">Building Meal</h1>
     </div>

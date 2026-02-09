@@ -12,6 +12,7 @@ update_lock = threading.Lock()
 update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100.0  # Server-side amount state - ensure it's a float
+meal_mode_active = False  # Server-side meal mode state - shared across all clients
 
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
@@ -146,6 +147,21 @@ function poll() {
                     if (!data.updated) {
                         debug('No updates');
                     }
+
+                    // Handle meal mode changes from server
+                    if (typeof data.meal_mode !== 'undefined') {
+                        var mealBg = 'linear-gradient(135deg, #1a2a2e 0%, #163e3e 50%, #0f4660 100%)';
+                        var normalBg = 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)';
+                        if (data.meal_mode) {
+                            document.body.style.background = mealBg;
+                            var ind = document.getElementById('meal-mode-indicator');
+                            if (ind) ind.style.display = 'block';
+                        } else {
+                            document.body.style.background = normalBg;
+                            var ind = document.getElementById('meal-mode-indicator');
+                            if (ind) ind.style.display = 'none';
+                        }
+                    }
                 } catch (e) {
                     debug('JSON parse error: ' + e.message);
                 }
@@ -215,7 +231,8 @@ def poll_updates():
                 'total_protein': calculate_daily_total(),
                 'nonce': current_nonce,
                 'current_amount': current_amount,
-                'server_timestamp': time.time()
+                'server_timestamp': time.time(),
+                'meal_mode': meal_mode_active
             }
             print(f"[DEBUG] Immediate response: {response}")
             return jsonify(response)
@@ -232,7 +249,8 @@ def poll_updates():
                     'total_protein': calculate_daily_total(),
                     'nonce': current_nonce,
                     'current_amount': current_amount,
-                    'server_timestamp': time.time()
+                    'server_timestamp': time.time(),
+                    'meal_mode': meal_mode_active
                 }
                 print(f"[DEBUG] Event response: {response}")
                 return jsonify(response)
@@ -242,7 +260,8 @@ def poll_updates():
         'updated': False,
         'amount_changed': False,
         'current_amount': current_amount,
-        'server_timestamp': time.time()
+        'server_timestamp': time.time(),
+        'meal_mode': meal_mode_active
     })
 
 def set_amount():
@@ -276,6 +295,19 @@ def get_current_amount():
     """Get the current amount value"""
     return current_amount
 
+def get_meal_mode():
+    """Get the current meal mode state"""
+    return meal_mode_active
+
+def set_meal_mode(active):
+    """Set the meal mode state and notify all clients"""
+    global meal_mode_active
+    with update_lock:
+        meal_mode_active = active
+    # Wake up polling clients to inform them of the change
+    update_event.set()
+    threading.Timer(0.1, update_event.clear).start()
+
 def get_polling_javascript():
     """Get the JavaScript code for polling functionality"""
     return POLLING_JAVASCRIPT
@@ -290,6 +322,15 @@ def register_polling_routes(app):
     @app.route('/set-amount', methods=['POST'])
     def set_amount_route():
         return set_amount()
+
+    @app.route('/set-meal-mode', methods=['POST'])
+    def set_meal_mode_route():
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'No JSON data'}), 400
+        active = data.get('active', False)
+        set_meal_mode(active)
+        return jsonify({'status': 'success', 'meal_mode': active})
 
     @app.route('/static/polling.js')
     def polling_js():
