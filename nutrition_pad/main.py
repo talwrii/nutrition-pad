@@ -1464,15 +1464,56 @@ def log_food():
 
 @app.route('/delete-entry', methods=['POST'])
 def delete_entry():
-    """Delete a food entry from today's log by index"""
+    """Delete a food entry from a log by ID or index.
+
+    JSON body (by ID - preferred):
+        id: str - entry ID (e.g., '20260209143012abcd')
+
+    JSON body (by index - legacy):
+        index: int - entry index to delete
+        date: str (optional) - date in YYYY-MM-DD format, defaults to today
+    """
     try:
         data = request.json
-        if not data or 'index' not in data:
-            return jsonify({'error': 'No index provided'}), 400
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # ID-based deletion (preferred)
+        if 'id' in data:
+            entry_id = data['id']
+            # Extract date from ID (format: YYYYMMDDHHMMSSxxxx)
+            try:
+                date_part = entry_id[:8]
+                target_date = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}"
+            except:
+                return jsonify({'error': 'Invalid entry ID format'}), 400
+
+            log_file = os.path.join(LOGS_DIR, f'{target_date}.json')
+            if not os.path.exists(log_file):
+                return jsonify({'error': f'No log file for {target_date}'}), 400
+
+            with open(log_file, 'r') as f:
+                log_entries = json.load(f)
+
+            # Find and remove entry by ID
+            for i, entry in enumerate(log_entries):
+                if entry.get('id') == entry_id:
+                    del log_entries[i]
+                    with open(log_file, 'w') as f:
+                        json.dump(log_entries, f, indent=2)
+                    mark_updated("delete_entry")
+                    return jsonify({'status': 'success'})
+
+            return jsonify({'error': f'Entry with ID {entry_id} not found'}), 404
+
+        # Index-based deletion (legacy)
+        if 'index' not in data:
+            return jsonify({'error': 'No id or index provided'}), 400
         index = data['index']
-        log_file = os.path.join(LOGS_DIR, date.today().strftime('%Y-%m-%d') + '.json')
+        target_date = data.get('date', date.today().strftime('%Y-%m-%d'))
+        log_file = os.path.join(LOGS_DIR, f'{target_date}.json')
         if not os.path.exists(log_file):
-            return jsonify({'error': 'No log file for today'}), 400
+            return jsonify({'error': f'No log file for {target_date}'}), 400
         with open(log_file, 'r') as f:
             log_entries = json.load(f)
         if index < 0 or index >= len(log_entries):
