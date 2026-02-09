@@ -8,8 +8,9 @@ Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all test
 # Releasing and deploying
 
 1. Bump version in `pyproject.toml`
-2. Run `./release` — runs tests, pushes to git, tags, builds, uploads to PyPI
-3. Run `./deploy/deploy` — SSHs to the server, pip upgrades, restarts the systemd service
+2. Commit all changes (release script requires clean working tree)
+3. Run `./release` — runs tests, pushes to git, tags, builds, uploads to PyPI
+4. Run `./deploy/deploy` — SSHs to the server, pip upgrades, restarts the systemd service
 
 # Local development
 
