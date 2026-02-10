@@ -14,7 +14,7 @@ Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all test
 
 No need to `git push` manually — `./release` handles that.
 
-**PyPI cache issue:** Sometimes the first deploy after release shows "NO NEW VERSION INSTALLED" because PyPI's CDN hasn't propagated yet. Just wait ~30 seconds and run `./deploy/deploy` again.
+**PyPI cache issue:** After `./release`, wait ~30 seconds before running `./deploy/deploy`. PyPI's CDN takes time to propagate. If deploy shows "NO NEW VERSION INSTALLED", just wait and try again.
 
 # Local development
 
