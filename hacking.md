@@ -12,6 +12,8 @@ Run `./run-tests` - spins up isolated server on port 5099 in /tmp, runs all test
 3. Run `./release` — runs full test suite, pushes to git, tags, builds, uploads to PyPI
 4. Run `./deploy/deploy` — SSHs to the server, pip upgrades, restarts the systemd service
 
+No need to `git push` manually — `./release` handles that.
+
 **PyPI cache issue:** Sometimes the first deploy after release shows "NO NEW VERSION INSTALLED" because PyPI's CDN hasn't propagated yet. Just wait ~30 seconds and run `./deploy/deploy` again.
 
 # Local development
