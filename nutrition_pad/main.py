@@ -250,13 +250,20 @@ HTML_INDEX = """
                         item.protein_per_gram = food.protein_per_gram || 0;
                         item.fiber_per_gram = food.fiber_per_gram || 0;
                     }
-                    var items = [];
-                    try { items = JSON.parse(sessionStorage.getItem('mealItems') || '[]'); } catch(e) {}
-                    items.push(item);
-                    sessionStorage.setItem('mealItems', JSON.stringify(items));
-                    // Update indicator count
-                    var ind = document.getElementById('meal-mode-indicator');
-                    if (ind) ind.textContent = 'Building Meal \u2014 ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' added';
+                    // POST item to server for cross-tablet sync
+                    var xhr2 = new XMLHttpRequest();
+                    xhr2.open('POST', '/add-meal-item', true);
+                    xhr2.setRequestHeader('Content-Type', 'application/json');
+                    xhr2.onreadystatechange = function() {
+                        if (xhr2.readyState === 4 && xhr2.status === 200) {
+                            var resp = JSON.parse(xhr2.responseText);
+                            var items = resp.meal_items || [];
+                            // Update indicator count
+                            var ind = document.getElementById('meal-mode-indicator');
+                            if (ind) ind.textContent = 'Building Meal \u2014 ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' added';
+                        }
+                    };
+                    xhr2.send(JSON.stringify(item));
                 }
             };
             xhr.send();

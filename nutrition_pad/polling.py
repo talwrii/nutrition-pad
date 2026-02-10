@@ -13,6 +13,7 @@ update_event = threading.Event()
 current_nonce = None  # Store the nonce from the last update
 current_amount = 100.0  # Server-side amount state - ensure it's a float
 meal_mode_active = False  # Server-side meal mode state - shared across all clients
+meal_items = []  # Server-side meal items - shared across all clients
 
 # JavaScript for polling functionality
 POLLING_JAVASCRIPT = """
@@ -241,7 +242,8 @@ def poll_updates():
                 'nonce': current_nonce,
                 'current_amount': current_amount,
                 'server_timestamp': time.time(),
-                'meal_mode': meal_mode_active
+                'meal_mode': meal_mode_active,
+                'meal_items': meal_items
             }
             print(f"[DEBUG] Immediate response: {response}")
             return jsonify(response)
@@ -259,7 +261,8 @@ def poll_updates():
                     'nonce': current_nonce,
                     'current_amount': current_amount,
                     'server_timestamp': time.time(),
-                    'meal_mode': meal_mode_active
+                    'meal_mode': meal_mode_active,
+                    'meal_items': meal_items
                 }
                 print(f"[DEBUG] Event response: {response}")
                 return jsonify(response)
@@ -270,7 +273,8 @@ def poll_updates():
         'amount_changed': False,
         'current_amount': current_amount,
         'server_timestamp': time.time(),
-        'meal_mode': meal_mode_active
+        'meal_mode': meal_mode_active,
+        'meal_items': meal_items
     })
 
 def set_amount():
@@ -310,10 +314,33 @@ def get_meal_mode():
 
 def set_meal_mode(active):
     """Set the meal mode state and notify all clients"""
-    global meal_mode_active
+    global meal_mode_active, meal_items
     with update_lock:
         meal_mode_active = active
+        if not active:
+            meal_items = []  # Clear items when meal mode ends
     # Wake up polling clients to inform them of the change
+    update_event.set()
+    threading.Timer(0.1, update_event.clear).start()
+
+def get_meal_items():
+    """Get the current meal items"""
+    return meal_items
+
+def add_meal_item(item):
+    """Add an item to the current meal"""
+    global meal_items
+    with update_lock:
+        meal_items.append(item)
+    # Wake up polling clients
+    update_event.set()
+    threading.Timer(0.1, update_event.clear).start()
+
+def clear_meal_items():
+    """Clear all meal items"""
+    global meal_items
+    with update_lock:
+        meal_items = []
     update_event.set()
     threading.Timer(0.1, update_event.clear).start()
 
@@ -340,6 +367,18 @@ def register_polling_routes(app):
         active = data.get('active', False)
         set_meal_mode(active)
         return jsonify({'status': 'success', 'meal_mode': active})
+
+    @app.route('/add-meal-item', methods=['POST'])
+    def add_meal_item_route():
+        data = request.json
+        if data is None:
+            return jsonify({'error': 'No JSON data'}), 400
+        add_meal_item(data)
+        return jsonify({'status': 'success', 'meal_items': get_meal_items()})
+
+    @app.route('/get-meal-items')
+    def get_meal_items_route():
+        return jsonify({'meal_items': get_meal_items(), 'meal_mode': get_meal_mode()})
 
     @app.route('/static/polling.js')
     def polling_js():

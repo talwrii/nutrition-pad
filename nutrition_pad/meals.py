@@ -166,64 +166,72 @@ HTML_MEALS_BUILD = """
             return (item.protein_per_gram || 0) * (item.amount || 100);
         }
 
-        function loadItems() {
-            try { return JSON.parse(sessionStorage.getItem('mealItems') || '[]'); } catch(e) { return []; }
+        var cachedItems = [];
+
+        function loadItemsFromServer(callback) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/get-meal-items', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText);
+                    cachedItems = data.meal_items || [];
+                    if (callback) callback(cachedItems);
+                }
+            };
+            xhr.send();
         }
 
         function removeItem(index) {
-            var items = loadItems();
-            items.splice(index, 1);
-            sessionStorage.setItem('mealItems', JSON.stringify(items));
-            renderItems();
+            // For now, just don't support removal (would need server endpoint)
+            alert('Item removal not yet supported in server-sync mode');
         }
 
         function renderItems() {
-            var items = loadItems();
-            var container = document.getElementById('meal-items');
-            var totalsEl = document.getElementById('meal-totals');
-            var doneBtn = document.getElementById('done-btn');
+            loadItemsFromServer(function(items) {
+                var container = document.getElementById('meal-items');
+                var totalsEl = document.getElementById('meal-totals');
+                var doneBtn = document.getElementById('done-btn');
 
-            if (items.length === 0) {
-                container.innerHTML = '<div class="meal-empty">No items yet.<br><a href="/">Go to Food Pads</a> and click foods to add them.</div>';
-                if (totalsEl) totalsEl.innerHTML = '';
-                if (doneBtn) doneBtn.disabled = true;
-                return;
-            }
+                if (items.length === 0) {
+                    container.innerHTML = '<div class="meal-empty">No items yet.<br><a href="/">Go to Food Pads</a> and click foods to add them.</div>';
+                    if (totalsEl) totalsEl.innerHTML = '';
+                    if (doneBtn) doneBtn.disabled = true;
+                    return;
+                }
 
-            var html = '';
-            var totalCal = 0;
-            var totalProt = 0;
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i];
-                var cal = Math.round(itemCal(item));
-                var prot = Math.round(itemProt(item) * 10) / 10;
-                totalCal += cal;
-                totalProt += prot;
-                var detail = item.type === 'unit' ? '1 unit' : item.amount + 'g';
-                html += '<div class="meal-item">';
-                html += '<span>' + item.name + ' <span class="item-detail">' + detail + '</span></span>';
-                html += '<span>' + cal + ' kcal <span class="meal-item-remove" onclick="removeItem(' + i + ')">&times;</span></span>';
-                html += '</div>';
-            }
-            container.innerHTML = html;
-            if (totalsEl) totalsEl.innerHTML = items.length + ' items &middot; ' + totalCal + ' kcal &middot; ' + totalProt + 'g protein';
-            updateDoneBtn();
+                var html = '';
+                var totalCal = 0;
+                var totalProt = 0;
+                for (var i = 0; i < items.length; i++) {
+                    var item = items[i];
+                    var cal = Math.round(itemCal(item));
+                    var prot = Math.round(itemProt(item) * 10) / 10;
+                    totalCal += cal;
+                    totalProt += prot;
+                    var detail = item.type === 'unit' ? '1 unit' : (item.amount || 100) + 'g';
+                    html += '<div class="meal-item">';
+                    html += '<span>' + item.name + ' <span class="item-detail">' + detail + '</span></span>';
+                    html += '<span>' + cal + ' kcal</span>';
+                    html += '</div>';
+                }
+                container.innerHTML = html;
+                if (totalsEl) totalsEl.innerHTML = items.length + ' items &middot; ' + totalCal + ' kcal &middot; ' + totalProt + 'g protein';
+                updateDoneBtn();
+            });
         }
 
         function updateDoneBtn() {
             var doneBtn = document.getElementById('done-btn');
             var nameInput = document.getElementById('meal-name');
-            var items = loadItems();
             if (doneBtn && nameInput) {
-                doneBtn.disabled = !(items.length > 0 && nameInput.value.trim().length > 0);
+                doneBtn.disabled = !(cachedItems.length > 0 && nameInput.value.trim().length > 0);
             }
         }
 
         function doneMeal() {
             var nameInput = document.getElementById('meal-name');
             var name = nameInput ? nameInput.value.trim() : '';
-            var items = loadItems();
-            if (!name || items.length === 0) return;
+            if (!name || cachedItems.length === 0) return;
 
             var doneBtn = document.getElementById('done-btn');
             if (doneBtn) { doneBtn.disabled = true; doneBtn.textContent = 'Saving...'; }
@@ -235,7 +243,6 @@ HTML_MEALS_BUILD = """
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
                         sessionStorage.removeItem('mealMode');
-                        sessionStorage.removeItem('mealItems');
                         sessionStorage.removeItem('mealName');
                         setServerMealMode(false);
                         window.location.href = '/?pad=meals';
@@ -245,12 +252,11 @@ HTML_MEALS_BUILD = """
                     }
                 }
             };
-            xhr.send(JSON.stringify({ name: name, items: items }));
+            xhr.send(JSON.stringify({ name: name, items: cachedItems }));
         }
 
         function cancelMeal() {
             sessionStorage.removeItem('mealMode');
-            sessionStorage.removeItem('mealItems');
             sessionStorage.removeItem('mealName');
             setServerMealMode(false);
             window.location.href = '/today';

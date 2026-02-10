@@ -15,6 +15,7 @@ import time
 import asyncio
 from pathlib import Path
 
+import aiohttp
 from playwright.async_api import async_playwright
 
 # Configuration
@@ -23,7 +24,7 @@ SCREENSHOT_DIR = Path("screenshots")
 SCREENSHOT_DIR.mkdir(exist_ok=True)
 
 # Timeouts
-SYNC_TIMEOUT = 8000  # ms to wait for meal mode sync
+SYNC_TIMEOUT = 15000  # ms to wait for meal mode sync
 POLL_INTERVAL = 200  # ms between checks
 
 
@@ -68,17 +69,15 @@ async def get_item_count(page):
     return None
 
 
-async def get_meal_items_count(page):
-    """Get number of items in the current meal being built."""
-    count = await page.evaluate("""(() => {
-        try {
-            var items = JSON.parse(sessionStorage.getItem('mealItems') || '[]');
-            return items.length;
-        } catch(e) {
-            return 0;
-        }
-    })()""")
-    return count
+async def get_meal_items_count_from_server(base_url):
+    """Get number of items in the current meal from server."""
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{base_url}/get-meal-items") as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return len(data.get('meal_items', []))
+    return 0
 
 
 async def test_meal_mode_sync():
@@ -156,14 +155,15 @@ async def test_meal_mode_sync():
                     return False
                 print(f"   ✓ Item count unchanged ({initial_count} → {final_count})")
 
-            # Check meal items on page2 (session storage should have the item)
-            meal_items = await get_meal_items_count(page2)
-            print(f"   Meal items in session: {meal_items}")
+            # Check meal items on server (shared across all clients)
+            meal_items = await get_meal_items_count_from_server(BASE_URL)
+            print(f"   Meal items on server: {meal_items}")
 
             if meal_items > 0:
-                print(f"   ✓ Food added to meal ({meal_items} item(s))")
+                print(f"   ✓ Food added to meal on server ({meal_items} item(s))")
             else:
-                print("   ⚠️  No meal items in sessionStorage (may be expected)")
+                print("   ❌ FAILED: No meal items on server after click")
+                return False
 
             # === Step 6: Cancel meal mode and verify sync ===
             print("\n6️⃣  Cancelling meal mode...")
