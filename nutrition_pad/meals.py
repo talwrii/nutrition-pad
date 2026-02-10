@@ -368,6 +368,16 @@ def register_meals_routes(app):
             })
         return jsonify({'meals': result})
 
+    @app.route('/api/meals/<meal_id>', methods=['DELETE'])
+    def api_meal_delete(meal_id):
+        meals = load_meals()
+        original_count = len(meals)
+        meals = [m for m in meals if m.get('id') != meal_id]
+        if len(meals) == original_count:
+            return jsonify({'error': 'Meal not found'}), 404
+        save_meals(meals)
+        return jsonify({'success': True, 'deleted': meal_id})
+
     @app.route('/log-meal', methods=['POST'])
     def log_meal():
         data = request.json

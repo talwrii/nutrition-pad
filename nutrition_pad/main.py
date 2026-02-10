@@ -472,12 +472,18 @@ HTML_INDEX = """
         {% endif %}
     </div>
     {% endif %}
-    <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="showTodayLog()">
-            View Today's Log
+    <div class="bottom-nav" style="display: flex; gap: 10px;">
+        {% if current_pad == 'meals' %}
+        <button class="bottom-nav-btn" onclick="showTodayLog()" style="flex: 1; background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
+            Today's Log
         </button>
-        <button class="bottom-nav-btn" onclick="showNutrition()" style="background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
-            Nutrition Dashboard
+        {% else %}
+        <button class="bottom-nav-btn" onclick="showTodayLog()" style="flex: 1;">
+            Today's Log
+        </button>
+        {% endif %}
+        <button class="bottom-nav-btn" onclick="showNutrition()" style="flex: 1;">
+            Dashboard
         </button>
     </div>
 </body>
@@ -668,9 +674,12 @@ HTML_TODAY = """
             <div class="no-entries">No foods logged today</div>
         {% endif %}
     </div>
-    <div class="bottom-nav">
-        <button class="bottom-nav-btn" onclick="window.location.href='/'">
-            Back to Food Pads
+    <div class="bottom-nav" style="display: flex; gap: 10px;">
+        <button class="bottom-nav-btn" onclick="window.location.href='/?pad=meals'" style="flex: 1; background: linear-gradient(135deg, #4ecdc4, #00d4ff);">
+            Meals
+        </button>
+        <button class="bottom-nav-btn" onclick="window.location.href='/'" style="flex: 1;">
+            Food Pads
         </button>
     </div>
 </body>
@@ -826,12 +835,22 @@ HTML_NUTRITION = """
                 if (ind) ind.style.display = 'block';
             }
         }
+        var pageLoadDate = new Date().toDateString();
+        function checkMidnight() {
+            var now = new Date();
+            if (now.toDateString() !== pageLoadDate) {
+                // Day has changed, reload to show new day
+                window.location.reload();
+            }
+        }
         window.onload = function() {
             startLongPolling();
             updateTimeSinceAte();
             checkMealMode();
             // Update time display every 30 seconds for accuracy
             setInterval(updateTimeSinceAte, 30000);
+            // Check for midnight every minute
+            setInterval(checkMidnight, 60000);
         };
     </script>
 </head>
