@@ -154,10 +154,19 @@ function poll() {
                         var normalBg = 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)';
                         if (data.meal_mode) {
                             document.body.style.background = mealBg;
+                            sessionStorage.setItem('mealMode', '1');
+                            // Update local mealMode variable if it exists (food pads page)
+                            if (typeof window.setMealModeFromServer === 'function') {
+                                window.setMealModeFromServer(true);
+                            }
                             var ind = document.getElementById('meal-mode-indicator');
                             if (ind) ind.style.display = 'block';
                         } else {
                             document.body.style.background = normalBg;
+                            sessionStorage.removeItem('mealMode');
+                            if (typeof window.setMealModeFromServer === 'function') {
+                                window.setMealModeFromServer(false);
+                            }
                             var ind = document.getElementById('meal-mode-indicator');
                             if (ind) ind.style.display = 'none';
                         }

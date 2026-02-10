@@ -279,6 +279,19 @@ HTML_INDEX = """
             }
         }
 
+        // Called by polling.js when server meal mode changes
+        window.setMealModeFromServer = function(active) {
+            mealMode = active;
+            var ind = document.getElementById('meal-mode-indicator');
+            if (active) {
+                if (ind) ind.style.display = 'block';
+            } else {
+                if (ind) ind.style.display = 'none';
+                // Clear local meal items when meal mode ends
+                sessionStorage.removeItem('mealItems');
+            }
+        };
+
         function logFood(padKey, foodKey) {
             if (mealMode) {
                 addToMeal(padKey, foodKey);
