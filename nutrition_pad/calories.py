@@ -21,7 +21,7 @@ HTML_CALORIES = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .food-link, .notes-link {
+        .settings-cog, .food-link, .notes-link, .meal-link, .amounts-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;

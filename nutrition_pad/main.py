@@ -45,7 +45,7 @@ HTML_INDEX = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .notes-link, .amounts-link, .food-link {
+        .settings-cog, .notes-link, .amounts-link, .food-link, .meal-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -183,7 +183,7 @@ HTML_INDEX = """
                 top: 15px;
                 right: 15px;
             }
-            .settings-cog, .notes-link, .amounts-link {
+            .settings-cog, .notes-link, .amounts-link, .food-link, .meal-link {
                 font-size: 1.3em;
             }
         }
@@ -499,7 +499,7 @@ HTML_TODAY = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .notes-link, .food-link, .meal-link {
+        .settings-cog, .notes-link, .food-link, .meal-link, .amounts-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -558,7 +558,7 @@ HTML_TODAY = """
                 top: 15px;
                 right: 15px;
             }
-            .settings-cog, .notes-link {
+            .settings-cog, .notes-link, .amounts-link, .food-link, .meal-link {
                 font-size: 1.3em;
             }
         }
@@ -692,7 +692,7 @@ HTML_NUTRITION = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .food-link, .notes-link {
+        .settings-cog, .food-link, .notes-link, .meal-link, .amounts-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -932,7 +932,7 @@ HTML_FOOD_EDITOR = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .food-link, .notes-link {
+        .settings-cog, .food-link, .notes-link, .meal-link, .amounts-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;

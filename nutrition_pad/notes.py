@@ -23,7 +23,7 @@ HTML_NOTES = """
             gap: 15px;
             margin-bottom: 10px;
         }
-        .settings-cog, .notes-link, .amounts-link, .food-link {
+        .settings-cog, .notes-link, .amounts-link, .food-link, .meal-link {
             font-size: 1.5em;
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
