@@ -347,10 +347,22 @@ def calculate_nutrition_stats():
         'kcal_per_fiber': f"{kcal_per_fiber:.0f}" if total_fiber > 0 else '--'
     }
 
+def is_food_entry(entry):
+    """Does this entry count as having eaten?
+
+    Excludes drinks and trivial items under 20 kcal, but keeps unknowns: an
+    unknown is logged precisely because something was eaten but not yet
+    identified, and it carries 0 calories until it is resolved.
+    """
+    return (entry.get('calories', 0) >= 20
+            or 'unknown' in entry.get('food', '').lower()
+            or 'unknown' in entry.get('name', '').lower())
+
+
 def calculate_time_since_last_ate():
-    """Calculate time since last food entry (excludes drinks/items under 20 kcal but includes unknowns)"""
+    """Calculate time since last food entry (see is_food_entry for what counts)"""
     entries = load_today_log()
-    food_entries = [e for e in entries if e.get('calories', 0) >= 20 or 'unknown' in e.get('food', '').lower() or 'unknown' in e.get('name', '').lower()]
+    food_entries = [e for e in entries if is_food_entry(e)]
 
     # If no food today, check previous days
     if not food_entries:
@@ -362,7 +374,7 @@ def calculate_time_since_last_ate():
                 try:
                     with open(log_file, 'r') as f:
                         old_entries = json.load(f)
-                    food_entries = [e for e in old_entries if e.get('calories', 0) >= 20 or 'unknown' in e.get('food', '').lower() or 'unknown' in e.get('name', '').lower()]
+                    food_entries = [e for e in old_entries if is_food_entry(e)]
                     if food_entries:
                         break
                 except (json.JSONDecodeError, IOError):
@@ -387,6 +399,62 @@ def calculate_time_since_last_ate():
         }
     except (ValueError, TypeError):
         return None
+
+# Entries closer together than this are treated as one sitting. Eating is a
+# period rather than an instant, so logging three things over ten minutes is
+# one meal, not three.
+EATING_SESSION_GAP_MINUTES = 15
+
+
+def _time_to_minutes(time_str):
+    """'HH:MM' -> minutes past midnight, or None if unparseable."""
+    try:
+        parts = str(time_str).split(':')
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, IndexError, AttributeError, TypeError):
+        return None
+
+
+def _minutes_to_time(total_minutes):
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def calculate_eating_intervals(target_date, gap_minutes=EATING_SESSION_GAP_MINUTES):
+    """Eating sessions for a day, oldest first.
+
+    Uses the same "counts as eating" rule as calculate_time_since_last_ate, so
+    the intervals and the Since Last Ate counter can never disagree about what
+    a meal was. A lone entry yields a zero-length session; callers give those a
+    minimum width when drawing.
+    """
+    entries = load_log_for_date(target_date)
+    minutes = sorted(
+        m for m in (_time_to_minutes(e.get('time')) for e in entries if is_food_entry(e))
+        if m is not None
+    )
+    if not minutes:
+        return []
+
+    def session(start, end, count):
+        return {
+            'start_min': start, 'end_min': end,
+            'start': _minutes_to_time(start), 'end': _minutes_to_time(end),
+            'minutes': end - start, 'count': count,
+        }
+
+    sessions = []
+    start = prev = minutes[0]
+    count = 1
+    for m in minutes[1:]:
+        if m - prev <= gap_minutes:
+            count += 1
+        else:
+            sessions.append(session(start, prev, count))
+            start, count = m, 1
+        prev = m
+    sessions.append(session(start, prev, count))
+    return sessions
+
 
 PERCENTILE_CONFIG_FILE = os.path.join(LOGS_DIR, 'percentile_config.json')
 

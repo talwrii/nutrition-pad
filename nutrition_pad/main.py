@@ -14,7 +14,7 @@ from .data import (
     ensure_logs_directory, load_config, load_today_log, load_log_for_date, save_food_entry,
     calculate_daily_total, calculate_daily_item_count, calculate_nutrition_stats,
     validate_food_request, get_food_data, get_all_pads, CONFIG_FILE, LOGS_DIR,
-    calculate_time_since_last_ate, calculate_percentiles
+    calculate_time_since_last_ate, calculate_percentiles, calculate_eating_intervals
 )
 from .styles import register_styles_routes
 from .notes import register_notes_routes
@@ -695,6 +695,59 @@ HTML_NUTRITION = """
     <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Eating intervals: one shared clock axis so days can be read against
+           each other -- a meal split in two lines up under a single long one. */
+        .interval-strip {
+            margin: 25px auto 0;
+            max-width: 900px;
+            padding: 18px 20px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
+        }
+        .interval-strip-title {
+            font-size: 1.1em;
+            color: rgba(255, 255, 255, 0.75);
+            margin-bottom: 14px;
+            text-align: center;
+        }
+        .interval-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .interval-row-label {
+            width: 58px;
+            flex-shrink: 0;
+            font-size: 0.95em;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        .interval-track {
+            position: relative;
+            flex: 1;
+            height: 26px;
+            background: rgba(255, 255, 255, 0.07);
+            border-radius: 6px;
+        }
+        .interval-block {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            min-width: 3px;
+            border-radius: 4px;
+            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+        }
+        .interval-axis {
+            position: relative;
+            flex: 1;
+            height: 16px;
+        }
+        .interval-tick {
+            position: absolute;
+            top: 0;
+            transform: translateX(-50%);
+            font-size: 0.75em;
+            color: rgba(255, 255, 255, 0.45);
+        }
         .header-icons {
             display: flex;
             justify-content: center;
@@ -926,6 +979,32 @@ HTML_NUTRITION = """
                 {% endif %}
             </div>
         </div>
+
+        {% if interval_strip %}
+        <div class="interval-strip">
+            <div class="interval-strip-title">Eating Intervals</div>
+            {% for row in interval_strip.rows %}
+            <div class="interval-row">
+                <div class="interval-row-label">{{ row.label }}</div>
+                <div class="interval-track">
+                    {% for iv in row.intervals %}
+                    <div class="interval-block"
+                         style="left: {{ iv.left_pct }}%; width: {{ iv.width_pct }}%;"
+                         title="{{ iv.start }}-{{ iv.end }} ({{ iv.count }} item{{ '' if iv.count == 1 else 's' }})"></div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            <div class="interval-row">
+                <div class="interval-row-label"></div>
+                <div class="interval-axis">
+                    {% for tick in interval_strip.ticks %}
+                    <span class="interval-tick" style="left: {{ tick.left_pct }}%;">{{ tick.label }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     <div class="bottom-nav">
         <button class="bottom-nav-btn" onclick="window.location.href='/calories{% if not is_today %}?date={{ current_date }}{% endif %}'" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);">
@@ -1342,6 +1421,53 @@ def today_log():
                                 js_debug=app.config.get('JS_DEBUG', False))
 
 
+def build_interval_strip(rows):
+    """Lay eating sessions from several days onto one shared clock axis.
+
+    The shared axis is the whole point: because every row is positioned against
+    the same start and end, two short sessions on one day sit directly under a
+    single long one on another, so a split meal is visible as a split rather
+    than having to be worked out from timestamps.
+
+    `rows` is [(label, intervals)]. Returns None when no day has any intervals.
+    """
+    all_intervals = [i for _, intervals in rows for i in intervals]
+    if not all_intervals:
+        return None
+
+    # Snap to whole hours so the axis labels land on tick marks, and keep a
+    # floor on the span so a single short meal doesn't get stretched across
+    # the full width and read as an all-day graze.
+    axis_start = min(i['start_min'] for i in all_intervals) // 60 * 60
+    axis_end = -(-max(i['end_min'] for i in all_intervals) // 60) * 60
+    if axis_end - axis_start < 360:
+        axis_end = axis_start + 360
+    axis_start = max(0, axis_start)
+    axis_end = min(1440, axis_end)
+    span = axis_end - axis_start
+
+    def place(interval):
+        left = (interval['start_min'] - axis_start) / span * 100
+        width = interval['minutes'] / span * 100
+        # A one-entry session has zero duration; give it enough width to see.
+        return dict(interval, left_pct=round(left, 3), width_pct=round(max(width, 1.2), 3))
+
+    # Aim for ~8 labelled ticks, on a whole number of hours.
+    step_hours = max(1, round(span / 60 / 8))
+    ticks = []
+    tick = axis_start
+    while tick <= axis_end:
+        ticks.append({'label': f"{tick // 60:02d}",
+                      'left_pct': round((tick - axis_start) / span * 100, 3)})
+        tick += step_hours * 60
+
+    return {
+        'ticks': ticks,
+        'rows': [{'label': label, 'intervals': [place(i) for i in intervals]}
+                 for label, intervals in rows],
+    }
+
+
 @app.route('/nutrition')
 def nutrition_dashboard():
     date_str = request.args.get('date')
@@ -1410,8 +1536,15 @@ def nutrition_dashboard():
     cpp_delta = round(curr_cpp - prev_cpp, 1) if prev_prot > 0 and total_prot > 0 else None
     cpf_delta = round(curr_cpf - prev_cpf, 1) if prev_fib > 0 and total_fib > 0 else None
 
+    interval_strip = build_interval_strip([
+        ('Today' if is_today else target_date.strftime('%a'),
+         calculate_eating_intervals(target_date)),
+        (prev_day.strftime('%a'), calculate_eating_intervals(prev_day)),
+    ])
+
     return render_template_string(HTML_NUTRITION,
                                 log_entries=log_entries,
+                                interval_strip=interval_strip,
                                 total_calories=total_cal,
                                 total_protein=stats['total_protein'],
                                 total_fiber=stats.get('total_fiber', 0),

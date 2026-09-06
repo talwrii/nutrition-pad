@@ -100,26 +100,35 @@ def main():
     food_name = food_data.get('name', food_key)
     food_type = food_data.get('type', 'amount')
 
-    # Record entries (one at a time for proper logging)
     total_calories = 0
     total_protein = 0
 
-    for i in range(count):
-        nonce = generate_nonce()
+    if food_type == 'amount':
+        # Set the gram amount on the server, then log once
+        set_result = post_to_server(server, '/set-amount', {'amount': count})
+        if set_result is None or set_result.get('status') != 'success':
+            print(f"❌ Failed to set amount {count}g on server", file=sys.stderr)
+            return 1
 
-        payload = {
-            'pad': pad_key,
-            'food': food_key,
-            'nonce': nonce
-        }
+        nonce = generate_nonce()
+        payload = {'pad': pad_key, 'food': food_key, 'nonce': nonce}
         if at_timestamp:
             payload['at'] = at_timestamp
-
         log_result = post_to_server(server, '/log', payload)
-
         if log_result is None or log_result.get('status') != 'success':
-            print(f"❌ Failed to record entry {i+1}/{count}", file=sys.stderr)
+            print(f"❌ Failed to record entry", file=sys.stderr)
             return 1
+    else:
+        # Unit foods: log N times
+        for i in range(count):
+            nonce = generate_nonce()
+            payload = {'pad': pad_key, 'food': food_key, 'nonce': nonce}
+            if at_timestamp:
+                payload['at'] = at_timestamp
+            log_result = post_to_server(server, '/log', payload)
+            if log_result is None or log_result.get('status') != 'success':
+                print(f"❌ Failed to record entry {i+1}/{count}", file=sys.stderr)
+                return 1
 
     # Calculate totals for display
     if food_type == 'unit':

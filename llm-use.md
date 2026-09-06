@@ -30,3 +30,15 @@ EOF
 ```
 
 For type = "unit" foods, use calories and protein instead of the _per_gram variants.
+
+## Querying server data
+
+Use `jq` to parse JSON from the API — avoid inline Python heredocs.
+
+```
+curl -s http://nutrition.tatw.name/api/entries?days=30 | jq '.dates[0].entries'
+```
+
+## Reproducing locally with prod data
+
+Fetch entries from prod and drop them into `daily_logs/<today>.json`, then run `./dev-server` (port 9876). Use today's date as the filename so the dashboard treats them as the current day.
