@@ -946,7 +946,8 @@ HTML_NUTRITION = """
                 <div class="stat-value fiber">{{ total_fiber }}g</div>
                 <div class="stat-label">Fiber</div>
             </div>
-            <div class="stat-card">
+            <a href="/fasting-history" style="text-decoration: none; color: inherit;">
+            <div class="stat-card" style="cursor: pointer;">
                 <div id="time-since-ate" class="stat-value time-since"
                      data-last-meal-timestamp="{{ time_since_last_ate.timestamp if time_since_last_ate else '' }}"
                      data-server-time="{{ server_time }}">
@@ -962,6 +963,7 @@ HTML_NUTRITION = """
                 </div>
                 <div class="stat-label">Since Last Ate</div>
             </div>
+            </a>
             <div class="stat-card">
                 <div class="stat-value ratio">{{ avg_ratio }}</div>
                 {% if percentiles and percentiles.kcal_per_protein is not none %}<div class="stat-pct">{{ percentiles.kcal_per_protein }}%</div>{% endif %}
@@ -1564,6 +1566,185 @@ def nutrition_dashboard():
                                 is_today=is_today,
                                 current_date=target_date.isoformat(),
                                 js_debug=app.config.get('JS_DEBUG', False))
+
+
+HTML_FASTING_HISTORY = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fasting History</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .back-button {
+            display: block;
+            width: 90%;
+            max-width: 400px;
+            margin: 20px auto;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        .back-button:active {
+            transform: scale(0.98);
+        }
+        .day-section {
+            margin: 20px auto;
+            max-width: 800px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        .day-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #ffd93d;
+        }
+        .meal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            font-size: 1.1em;
+        }
+        .meal-time {
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+        .meal-items {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9em;
+        }
+        .gap-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 8px;
+            margin: 4px 0;
+            font-size: 1em;
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        .gap-duration {
+            background: rgba(255, 107, 107, 0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-button">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+
+        <h1 style="text-align: center; margin: 20px 0; font-size: 1.8em;">Fasting History</h1>
+
+        {% for day in days %}
+        <div class="day-section">
+            <div class="day-title">{{ day.label }}</div>
+
+            {% for item in day.timeline %}
+                {% if item.type == 'meal' %}
+                <div class="meal-row">
+                    <div class="meal-time">{{ item.time }}</div>
+                    <div class="meal-items">{{ item.count }} item{{ 's' if item.count != 1 else '' }}</div>
+                </div>
+                {% elif item.type == 'gap' %}
+                <div class="gap-row">
+                    <div class="gap-duration">
+                        <i class="far fa-clock"></i> {{ item.duration }} fasting
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            {% if not day.timeline %}
+            <div style="text-align: center; color: rgba(255, 255, 255, 0.5); padding: 20px;">
+                No meals recorded
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <a href="/" class="back-button" style="margin-top: 30px;">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</body>
+</html>
+"""
+
+
+@app.route('/fasting-history')
+def fasting_history():
+    """Show fasting history with meal times and gaps"""
+    from datetime import date, timedelta
+
+    # Get last 7 days
+    days_data = []
+    for i in range(7):
+        day = date.today() - timedelta(days=i)
+        sessions = calculate_eating_intervals(day)
+
+        # Build timeline with meals and gaps
+        timeline = []
+        for j, session in enumerate(sessions):
+            # Add meal
+            timeline.append({
+                'type': 'meal',
+                'time': session['start'] if session['start'] == session['end'] else f"{session['start']} - {session['end']}",
+                'count': session['count']
+            })
+
+            # Add gap to next meal if there is one
+            if j < len(sessions) - 1:
+                gap_start = session['end_min']
+                gap_end = sessions[j + 1]['start_min']
+                gap_minutes = gap_end - gap_start
+
+                if gap_minutes > 0:
+                    hours = gap_minutes // 60
+                    mins = gap_minutes % 60
+                    if hours > 0:
+                        duration = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+                    else:
+                        duration = f"{mins}m"
+
+                    timeline.append({
+                        'type': 'gap',
+                        'duration': duration,
+                        'minutes': gap_minutes
+                    })
+
+        # Label the day
+        if i == 0:
+            label = "Today"
+        elif i == 1:
+            label = "Yesterday"
+        else:
+            label = day.strftime('%a %d %b')
+
+        days_data.append({
+            'label': label,
+            'date': day,
+            'timeline': timeline
+        })
+
+    return render_template_string(HTML_FASTING_HISTORY, days=days_data)
 
 
 @app.route('/edit-foods', methods=['GET', 'POST'])
