@@ -1619,10 +1619,10 @@ HTML_FASTING_HISTORY = """
             background: rgba(255, 255, 255, 0.08);
             border-radius: 8px;
             font-size: 1.1em;
+            border-left: 4px solid;
         }
         .meal-time {
             font-weight: bold;
-            color: #4ecdc4;
         }
         .meal-items {
             color: rgba(255, 255, 255, 0.7);
@@ -1659,14 +1659,14 @@ HTML_FASTING_HISTORY = """
 
             {% for item in day.timeline %}
                 {% if item.type == 'meal' %}
-                <div class="meal-row">
-                    <div class="meal-time">{{ item.time }}</div>
+                <div class="meal-row" style="border-left-color: {{ item.color }};">
+                    <div class="meal-time" style="color: {{ item.color }};">{{ item.time }}</div>
                     <div class="meal-items">{{ item.count }} item{{ 's' if item.count != 1 else '' }}</div>
                 </div>
                 {% elif item.type == 'gap' %}
                 <div class="gap-row">
                     <div class="gap-duration">
-                        <i class="far fa-clock"></i> {{ item.duration }} fasting
+                        {% if item.is_overnight %}<i class="fas fa-moon"></i>{% else %}<i class="far fa-clock"></i>{% endif %} {{ item.duration }} fasting
                     </div>
                 </div>
                 {% endif %}
@@ -1694,40 +1694,113 @@ def fasting_history():
     """Show fasting history with meal times and gaps"""
     from datetime import date, timedelta
 
+    def get_time_color(time_str):
+        """Return color based on time of day (12 colors, 2-hour blocks)"""
+        # Extract hour from time (e.g., "14:58" or "14:58 - 15:30")
+        hour = int(time_str.split(':')[0])
+
+        # 12 colors in 6 pairs with natural day progression
+        if 0 <= hour < 2:
+            return '#34495e'  # Dark blue-grey (midnight-2am)
+        elif 2 <= hour < 4:
+            return '#5d6d7e'  # Lighter blue-grey (2-4am)
+        elif 4 <= hour < 6:
+            return '#9b59b6'  # Purple (4-6am)
+        elif 6 <= hour < 8:
+            return '#af7ac5'  # Lighter purple (6-8am)
+        elif 8 <= hour < 10:
+            return '#3498db'  # Blue (8-10am)
+        elif 10 <= hour < 12:
+            return '#5dade2'  # Lighter blue (10am-12pm)
+        elif 12 <= hour < 14:
+            return '#e67e22'  # Orange (12-2pm)
+        elif 14 <= hour < 16:
+            return '#f39c12'  # Gold/lighter orange (2-4pm)
+        elif 16 <= hour < 18:
+            return '#d35400'  # Dark orange (4-6pm)
+        elif 18 <= hour < 20:
+            return '#e74c3c'  # Red-orange (6-8pm)
+        elif 20 <= hour < 22:
+            return '#c0392b'  # Red (8-10pm)
+        else:  # 22-24
+            return '#e91e63'  # Pink-red/magenta (10pm-12am)
+
+    def format_gap_with_markers(gap_minutes):
+        """Format gap duration with hour markers"""
+        hours = gap_minutes // 60
+        mins = gap_minutes % 60
+        if hours > 0:
+            duration = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+        else:
+            duration = f"{mins}m"
+
+        # Add markers for significant milestones
+        markers = []
+        if hours >= 21:
+            markers.append("⭐⭐⭐")
+        elif hours >= 18:
+            markers.append("⭐⭐")
+        elif hours >= 15:
+            markers.append("⭐")
+        elif hours >= 12:
+            markers.append("✓")
+
+        if markers:
+            return f"{duration} {markers[0]}"
+        return duration
+
     # Get last 7 days
     days_data = []
+    prev_day_sessions = None
+
     for i in range(7):
         day = date.today() - timedelta(days=i)
         sessions = calculate_eating_intervals(day)
 
+        # Reverse sessions to show newest first (going back in time)
+        sessions_reversed = list(reversed(sessions))
+
         # Build timeline with meals and gaps
         timeline = []
-        for j, session in enumerate(sessions):
-            # Add meal
+
+        # Add fasting time from previous day's last meal if available
+        if sessions and prev_day_sessions:
+            first_meal_min = sessions[0]['start_min']
+            last_prev_meal_min = prev_day_sessions[-1]['end_min']
+            # Gap crosses day boundary: add 1440 minutes (24 hours) to account for next day
+            gap_minutes = (first_meal_min + 1440) - last_prev_meal_min
+
+            if gap_minutes > 0:
+                timeline.append({
+                    'type': 'gap',
+                    'duration': format_gap_with_markers(gap_minutes),
+                    'minutes': gap_minutes,
+                    'is_overnight': True
+                })
+
+        for j, session in enumerate(sessions_reversed):
+            # Add meal with color coding
+            time_display = session['start'] if session['start'] == session['end'] else f"{session['start']} - {session['end']}"
             timeline.append({
                 'type': 'meal',
-                'time': session['start'] if session['start'] == session['end'] else f"{session['start']} - {session['end']}",
-                'count': session['count']
+                'time': time_display,
+                'count': session['count'],
+                'color': get_time_color(session['start'])
             })
 
-            # Add gap to next meal if there is one
-            if j < len(sessions) - 1:
-                gap_start = session['end_min']
-                gap_end = sessions[j + 1]['start_min']
+            # Add gap to next meal (which is previous in reversed list)
+            if j < len(sessions_reversed) - 1:
+                # In reversed list, we go backwards in time
+                gap_start = sessions_reversed[j + 1]['end_min']
+                gap_end = session['start_min']
                 gap_minutes = gap_end - gap_start
 
                 if gap_minutes > 0:
-                    hours = gap_minutes // 60
-                    mins = gap_minutes % 60
-                    if hours > 0:
-                        duration = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
-                    else:
-                        duration = f"{mins}m"
-
                     timeline.append({
                         'type': 'gap',
-                        'duration': duration,
-                        'minutes': gap_minutes
+                        'duration': format_gap_with_markers(gap_minutes),
+                        'minutes': gap_minutes,
+                        'is_overnight': False
                     })
 
         # Label the day
@@ -1743,6 +1816,9 @@ def fasting_history():
             'date': day,
             'timeline': timeline
         })
+
+        # Remember this day's sessions for next iteration
+        prev_day_sessions = sessions
 
     return render_template_string(HTML_FASTING_HISTORY, days=days_data)
 
